@@ -24,7 +24,7 @@ Route::prefix('/api')->group(function(){
     Route::post('/login/livreur', [AuthController::class, 'login_liv']);
 
     Route::prefix('/client')->middleware('auth:client')->group(function(){
-        //Route pour ajouter une image au profil du client
+        //Route pour ajouter une image au profil client
         Route::post('/image/{hashid}/update', [ClientController::class, 'update_image']);
         //Route pour supprimer une image au profil client
         Route::post('/image/{hashid}/delete', [ClientController::class, 'delete_image']);
