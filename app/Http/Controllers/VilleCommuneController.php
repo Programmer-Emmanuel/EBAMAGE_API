@@ -216,7 +216,7 @@ class VilleCommuneController extends Controller
             'success' => true,
             'ville' => $ville->lib_ville,
             'hashid' => $hashid,
-            'data' => $communes 
+            'data' => $communes
         ]);
     }
 
