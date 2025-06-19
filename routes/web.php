@@ -8,6 +8,10 @@ use App\Http\Controllers\VariationController;
 use App\Http\Controllers\VilleCommuneController;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/', function(){
+    return view('welcome');
+});
+
 Route::prefix('/api')->group(function(){
     //Route authentification du client
     Route::post('/register/client', [AuthController::class, 'register_clt']);
