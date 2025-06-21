@@ -4,6 +4,7 @@ use App\Http\Controllers\ArticleController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategorieController;
 use App\Http\Controllers\ClientController;
+use App\Http\Controllers\RechercheController;
 use App\Http\Controllers\VariationController;
 use App\Http\Controllers\VilleCommuneController;
 use Illuminate\Support\Facades\Route;
@@ -21,6 +22,7 @@ Route::prefix('/api')->group(function(){
     //Route authentification de la boutique
     Route::post('/register/boutique', [AuthController::class, 'register_btq']);
     Route::post('/login/boutique', [AuthController::class, 'login_btq']);
+    Route::get('/info/boutique', [AuthController::class, 'info_btq'])->middleware('auth:boutique');
 
     // Route authentification du livreur
     Route::post('/register/livreur', [AuthController::class, 'register_liv']);
@@ -28,6 +30,8 @@ Route::prefix('/api')->group(function(){
     Route::post('/login/livreur', [AuthController::class, 'login_liv']);
 
     Route::prefix('/client')->middleware('auth:client')->group(function(){
+        //Route pour afficher les infos du client connecté
+        Route::get('/info', [AuthController::class, 'info_clt']);
         //Route pour ajouter une image au profil du client
         Route::post('/image/{hashid}/update', [ClientController::class, 'update_image']);
         //Route pour supprimer une image au profil client
@@ -36,6 +40,8 @@ Route::prefix('/api')->group(function(){
 
     //Route qui nécéssite que la boutique soit connecté
     Route::middleware('auth:boutique')->group(function () {
+        //Route pour afficher les infos de la boutique connectée
+        Route::get('/info/boutique', [AuthController::class, 'info_btq']);
 
         //CRUD ARTICLE
         Route::post('/article/ajout', [ArticleController::class, 'ajout_article']);
@@ -69,6 +75,11 @@ Route::prefix('/api')->group(function(){
         Route::post('/{hashid}/delete', [CategorieController::class, 'delete_categorie']);
     });
     Route::get('/categories', [CategorieController::class, 'liste_categorie']);
+
+    //RECHERCHES ET HISTORIQUES DES RECHERCHES
+    Route::post('/recherche', [RechercheController::class, "recherche"]);
+    Route::get('/historique', [RechercheController::class, 'historique']);
+
 
     //VILLES ET COMMUNES
 

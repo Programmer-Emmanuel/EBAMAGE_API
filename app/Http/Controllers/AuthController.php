@@ -23,13 +23,11 @@ class AuthController extends Controller
         //Request validate
         $request->validate([
             'nom_clt' => 'required',
-            'pren_clt' => 'required',
             'email_clt' => 'required|unique:users|email',
             'tel_clt' => 'required|digits:10|unique:users',
             'password_clt' => 'required|min:6'
         ], [
             'nom_clt.required' => 'Le nom du client est obligatoire.',
-            'pren_clt.required' => 'Le prénom du client est obligatoire.',
             'email_clt.required' => 'L’email du client est obligatoire.',
             'email_clt.unique' => 'L’email du client doit être unique.',
             'email_clt.email' => 'L’adresse email du client n’est pas valide.',
@@ -47,7 +45,6 @@ class AuthController extends Controller
         try{
             $client = new User();
             $client->nom_clt = $request->nom_clt;
-            $client->pren_clt = $request->pren_clt;
             $client->email_clt = $request->email_clt;
             $client->tel_clt = $request->tel_clt;
             // $client->image_clt = $request->image_clt;
@@ -143,6 +140,34 @@ class AuthController extends Controller
             ]);
         }
     }
+    
+    //INFO DU CLIENT A PARTIR DE SON TOKEN
+    public function info_clt(Request $request){
+        $client = $request->user();
+        try{
+           if($client && $client->otp_expires_at == null){
+                $client = $request->user();
+                return response()->json([
+                    'success' => true,
+                    'data' => $client,
+                    'message' => 'Infos du client récupérées avec succès.'
+                ]);
+           }
+           else{
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Client non connecté'
+                ]);
+           }
+        }
+        catch(QueryException $e){
+            return response()->json([
+                    'success' => false,
+                    'message' => 'Echec lors de la récupération des infos du client.',
+                    'erreur' => $e->getMessage()
+                ]);
+        }
+    }
 
     //INSCRIPTIOIN BOUTIQUE
     public function register_btq(Request $request){
@@ -215,6 +240,33 @@ class AuthController extends Controller
                 'message' => 'Boutique connecté',
                 'token' => $token
             ]);
+        }
+    }
+
+    public function info_btq(Request $request){
+        $boutique = $request->user();
+        try{
+           if($boutique && $boutique->otp_expires_at == null){
+                $boutique = $request->user();
+                return response()->json([
+                    'success' => true,
+                    'data' => $boutique,
+                    'message' => 'Infos de la boutique récupérées avec succès.'
+                ]);
+           }
+           else{
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Boutique non connecté'
+                ]);
+           }
+        }
+        catch(QueryException $e){
+            return response()->json([
+                    'success' => false,
+                    'message' => 'Echec lors de la récupération des infos de la boutique.',
+                    'erreur' => $e->getMessage()
+                ]);
         }
     }
 

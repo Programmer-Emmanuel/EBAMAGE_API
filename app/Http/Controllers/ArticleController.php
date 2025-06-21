@@ -110,8 +110,8 @@ class ArticleController extends Controller
     }
 
     public function liste_article(){
-        $id_boutique = auth('boutique')->id();
-        $articles = Article::where('id_btq', $id_boutique)->with('categories')->get();
+        // $id_boutique = auth('boutique')->id();
+        $articles = Article::all();
 
         if ($articles->isNotEmpty()) {
             return response()->json([
