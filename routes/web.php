@@ -22,7 +22,6 @@ Route::prefix('/api')->group(function(){
     //Route authentification de la boutique
     Route::post('/register/boutique', [AuthController::class, 'register_btq']);
     Route::post('/login/boutique', [AuthController::class, 'login_btq']);
-    Route::get('/info/boutique', [AuthController::class, 'info_btq'])->middleware('auth:boutique');
 
     // Route authentification du livreur
     Route::post('/register/livreur', [AuthController::class, 'register_liv']);
