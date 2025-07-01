@@ -90,7 +90,7 @@
             <div class="otp-code">{{ $otp }}</div>
         </div>
         
-        <p class="validity">⏳ Valide pendant <strong>5 minutes</strong></p>
+        <p class="validity">⏳ Valide pendant <strong>15 minutes</strong></p>
         
         <div class="warning">
             <strong>⚠️ Sécurité importante :</strong> Ne communiquez jamais ce code, même à nos équipes.

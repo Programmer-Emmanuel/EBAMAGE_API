@@ -17,6 +17,7 @@ Route::prefix('/api')->group(function(){
     //Route authentification du client
     Route::post('/register/client', [AuthController::class, 'register_clt']);
     Route::post('/verify/otp/client', [AuthController::class, 'verifyOtp']);
+    Route::post('/resend/otp/client', [AuthController::class, 'resendOtp']);
     Route::post('/login/client', [AuthController::class, 'login_clt']);
 
     //Route authentification de la boutique
