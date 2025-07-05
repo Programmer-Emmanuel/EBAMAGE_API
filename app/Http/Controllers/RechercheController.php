@@ -9,18 +9,20 @@ use Illuminate\Http\Request;
 
 class RechercheController extends Controller
 {
-    public function recherche(Request $request){
-        $request->validate([
-            'lib_recherche' => 'required'
-        ], [
-            'lib_recherche.required' => 'Le champ lib_recherche est requis.' 
-        ]);
+    public function recherche(Request $request)
+{
+    $request->validate([
+        'lib_recherche' => 'required'
+    ], [
+        'lib_recherche.required' => 'Le champ lib_recherche est requis.'
+    ]);
 
+    try {
         $lib = $request->lib_recherche;
 
-        //Ajout de la recherche dans l’historique
+        // Ajout dans l'historique
         $historique = new Historique();
-        $historique->lib_recherche = $request->lib_recherche;
+        $historique->lib_recherche = $lib;
         $historique->save();
 
         $articles = Article::with(['categories', 'variations'])
@@ -30,40 +32,58 @@ class RechercheController extends Controller
             })
             ->get();
 
-        if($articles->isNotEmpty()){
-
+        if ($articles->isNotEmpty()) {
             return response()->json([
                 'success' => true,
                 'data' => $articles,
                 'message' => 'Articles récupérés avec succès.'
             ]);
-        }
-        else{
+        } else {
             return response()->json([
                 'success' => false,
-                'message' => 'Aucun article ne correspond à votre recherche'
+                'message' => 'Aucun article ne correspond à votre recherche.'
             ]);
         }
 
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la recherche.',
+            'erreur' => $e->getMessage()
+        ], 500);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur inattendue est survenue.',
+            'erreur' => $e->getMessage()
+        ], 500);
     }
+}
 
 
-    public function historique(){
-        try{
-            $historique = Historique::all();
-            return response()->json([
-                'success' => true,
-                'data' => $historique,
-                'message' => 'Affichage de l’historique réussie'
-            ]);
-        }
-        catch(QueryException $e){
-            return response()->json([
-                'success' => false,
-                'message' => 'Echec lors de la récupération de l’historique.',
-                'erreur' => $e->getMessage()
-            ]);
-        }
+    public function historique()
+{
+    try {
+        $historique = Historique::all();
+
+        return response()->json([
+            'success' => true,
+            'data' => $historique,
+            'message' => 'Affichage de l’historique réussie.'
+        ]);
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Échec lors de la récupération de l’historique.',
+            'erreur' => $e->getMessage()
+        ], 500);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur inattendue est survenue.',
+            'erreur' => $e->getMessage()
+        ], 500);
     }
+}
 }
 

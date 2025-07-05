@@ -13,75 +13,83 @@ class ArticleController extends Controller
 {
 
     public function ajout_article(Request $request){
-        $request->validate([
-            'nom_article' => 'required',
-            'prix' => 'required|numeric|min:10',
-            'image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
-            'description' => 'required|min:10',
-            'id_categories' => 'required|array',
-            'id_categories.*' => 'string',
-            'id_variations' => 'nullable|array',
-            'id_variations.*' => 'string',
-        ], [
-            'nom_article.required' => 'Le nom de l’article est obligatoire.',
-            'prix.required' => 'Le prix est obligatoire.',
-            'prix.numeric' => 'Le prix doit être un nombre.',
-            'prix.min' => 'Le prix minimum autorisé est de 10.',
-            'image.required' => 'L’image est obligatoire.',
-            'image.image' => 'Le fichier doit être une image.',
-            'image.mimes' => 'L’image doit être au format jpeg, png ou jpg.',
-            'image.max' => 'La taille maximale de l’image est 2 Mo.',
-            'description.required' => 'La description est obligatoire.',
-            'description.min' => 'La description doit contenir au moins 10 caractères.',
-            'id_categories.required' => 'Les catégories sont obligatoires.',
-            'id_categories.array' => 'Les catégories doivent être envoyées sous forme de tableau.',
-            'id_categories.*.string' => 'Les identifiants des catégories doivent être valides.',
-            'id_variations.array' => 'Les variations doivent être envoyées sous forme de tableau.',
-            'id_variations.*.string' => 'Les identifiants des variations doivent être valides.',
-        ]);
+    $request->validate([
+        'nom_article' => 'required',
+        'prix' => 'required|numeric|min:10',
+        'image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
+        'description' => 'required|min:10',
+        'id_categories' => 'required|array',
+        'id_categories.*' => 'string',
+        'id_variations' => 'nullable|array',
+        'id_variations.*' => 'string',
+    ], [
+        'nom_article.required' => 'Le nom de l’article est obligatoire.',
+        'prix.required' => 'Le prix est obligatoire.',
+        'prix.numeric' => 'Le prix doit être un nombre.',
+        'prix.min' => 'Le prix minimum autorisé est de 10.',
+        'image.required' => 'L’image est obligatoire.',
+        'image.image' => 'Le fichier doit être une image.',
+        'image.mimes' => 'L’image doit être au format jpeg, png ou jpg.',
+        'image.max' => 'La taille maximale de l’image est 2 Mo.',
+        'description.required' => 'La description est obligatoire.',
+        'description.min' => 'La description doit contenir au moins 10 caractères.',
+        'id_categories.required' => 'Les catégories sont obligatoires.',
+        'id_categories.array' => 'Les catégories doivent être envoyées sous forme de tableau.',
+        'id_categories.*.string' => 'Les identifiants des catégories doivent être valides.',
+        'id_variations.array' => 'Les variations doivent être envoyées sous forme de tableau.',
+        'id_variations.*.string' => 'Les identifiants des variations doivent être valides.',
+    ]);
 
-        $image_article = $this->uploadImageToHosting($request->file('image'));
+    $image_article = $this->uploadImageToHosting($request->file('image'));
 
-        try {
-            $article = new Article();
-            $article->nom_article = $request->nom_article;
-            $article->prix = $request->prix;
-            $article->image = $image_article;
-            $article->description = $request->description;
-            $article->id_btq = auth('boutique')->id();
-            $article->save();
+    try {
+        $article = new Article();
+        $article->nom_article = $request->nom_article;
+        $article->prix = $request->prix;
+        $article->image = $image_article;
+        $article->description = $request->description;
+        $article->id_btq = auth('boutique')->id();
+        $article->save();
 
-            $id_categories = collect($request->id_categories)->map(function ($hashid) {
+        $id_categories = collect($request->id_categories)->map(function ($hashid) {
+            return Hashids::decode($hashid)[0] ?? null;
+        })->filter();
+
+        if ($id_categories->isNotEmpty()) {
+            $article->categories()->attach($id_categories);
+        }
+
+        if ($request->has('id_variations')) {
+            $id_variations = collect($request->id_variations)->map(function ($hashid) {
                 return Hashids::decode($hashid)[0] ?? null;
             })->filter();
 
-            if ($id_categories->isNotEmpty()) {
-                $article->categories()->attach($id_categories);
+            if ($id_variations->isNotEmpty()) {
+                $article->variations()->attach($id_variations);
             }
-
-            if ($request->has('id_variations')) {
-                $id_variations = collect($request->id_variations)->map(function ($hashid) {
-                    return Hashids::decode($hashid)[0] ?? null;
-                })->filter();
-
-                if ($id_variations->isNotEmpty()) {
-                    $article->variations()->attach($id_variations);
-                }
-            }
-
-            return response()->json([
-                'success' => true,
-                'data' => $article->load('categories', 'variations'),
-                'message' => 'Article enregistré avec succès.'
-            ]);
-        } catch (QueryException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Erreur lors de l’enregistrement de l’article',
-                'erreur' => $e->getMessage()
-            ]);
         }
+
+        return response()->json([
+            'success' => true,
+            'data' => $article->load('categories', 'variations'),
+            'message' => 'Article enregistré avec succès.'
+        ]);
+    } 
+    catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de l’enregistrement de l’article',
+            'erreur' => $e->getMessage()
+        ], 500);
     }
+    catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur inattendue est survenue lors de l’enregistrement de l’article',
+            'erreur' => $e->getMessage()
+        ], 500);
+    }
+}
 
 
 
@@ -110,13 +118,13 @@ class ArticleController extends Controller
     }
 
     public function liste_article(){
-        // $id_boutique = auth('boutique')->id();
-        $articles = Article::all();
+    try {
+        $articles = Article::with('categories', 'variations')->get();
 
         if ($articles->isNotEmpty()) {
             return response()->json([
                 'success' => true,
-                'data' => $articles->load('categories', 'variations'),
+                'data' => $articles,
                 'message' => 'Articles récupérés avec succès.'
             ]);
         } else {
@@ -125,39 +133,68 @@ class ArticleController extends Controller
                 'message' => 'Aucun article trouvé.'
             ]);
         }
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la récupération des articles.',
+            'erreur' => $e->getMessage(),
+        ], 500);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur inattendue est survenue.',
+            'erreur' => $e->getMessage(),
+        ], 500);
     }
+}
 
     public function article($hashid){
+    try {
         $id = Hashids::decode($hashid)[0] ?? null;
-    
+
         if (!$id) {
             return response()->json(['message' => 'ID invalide'], 400);
         }
 
         $article = Article::find($id);
 
-        $autre_article = Article::where('id_btq', $article->id_btq)->where('id', '!=', $article->id)->get();
-        
-        if($article){
-            return response()->json([
-                'success' => true,
-                'data' => $article,
-                'communs'=> $autre_article,
-                'message' => 'Article trouvé.'
-            ]);
-        }
-        else{
+        if (!$article) {
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors de la récupération de l’article.'
+                'message' => 'Article introuvable.'
             ]);
         }
+
+        $autre_article = Article::where('id_btq', $article->id_btq)
+                            ->where('id', '!=', $article->id)
+                            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $article,
+            'communs' => $autre_article,
+            'message' => 'Article trouvé.'
+        ]);
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la récupération de l’article.',
+            'erreur' => $e->getMessage()
+        ], 500);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur inattendue est survenue.',
+            'erreur' => $e->getMessage()
+        ], 500);
     }
+}
 
 
     public function articlesParCategorie($hashid){
+    try {
         $id = Hashids::decode($hashid)[0] ?? null;
-    
+
         if (!$id) {
             return response()->json(['message' => 'ID invalide'], 400);
         }
@@ -187,11 +224,24 @@ class ArticleController extends Controller
             'data' => $articles,
             'message' => 'Articles de la catégorie récupérés avec succès.'
         ]);
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la récupération des articles par catégorie.',
+            'erreur' => $e->getMessage()
+        ], 500);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur inattendue est survenue.',
+            'erreur' => $e->getMessage()
+        ], 500);
     }
-
+}
     public function delete_article($hashid){
+    try {
         $id = Hashids::decode($hashid)[0] ?? null;
-    
+
         if (!$id) {
             return response()->json(['message' => 'ID invalide'], 400);
         }
@@ -218,22 +268,36 @@ class ArticleController extends Controller
             'success' => true,
             'message' => 'Article supprimé avec succès.'
         ]);
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la suppression de l\'article.',
+            'erreur' => $e->getMessage()
+        ], 500);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur inattendue est survenue.',
+            'erreur' => $e->getMessage()
+        ], 500);
     }
+}
 
 
+    public function update_article(Request $request, $hashid)
+{
+    $request->validate([
+        'nom_article' => 'required',
+        'prix' => 'required|numeric|min:10',
+        'description' => 'required|min:10',
+        'image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+        'id_categories' => 'nullable|array',
+        'id_categories.*' => 'string',
+        'id_variations' => 'nullable|array',
+        'id_variations.*' => 'string',
+    ]);
 
-    public function update_article(Request $request, $hashid){
-        $request->validate([
-            'nom_article' => 'required',
-            'prix' => 'required|numeric|min:10',
-            'description' => 'required|min:10',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
-            'id_categories' => 'nullable|array',
-            'id_categories.*' => 'string',
-            'id_variations' => 'nullable|array',
-            'id_variations.*' => 'string',
-        ]);
-
+    try {
         $id = Hashids::decode($hashid)[0] ?? null;
 
         if (!$id) {
@@ -273,7 +337,7 @@ class ArticleController extends Controller
             $id_categories = collect($request->id_categories)->map(function ($hashid) {
                 return Hashids::decode($hashid)[0] ?? null;
             })->filter();
-            $article->categories()->sync($id_categories); // mise à jour propre
+            $article->categories()->sync($id_categories);
         }
 
         // MAJ des variations (si fournies)
@@ -281,7 +345,7 @@ class ArticleController extends Controller
             $id_variations = collect($request->id_variations)->map(function ($hashid) {
                 return Hashids::decode($hashid)[0] ?? null;
             })->filter();
-            $article->variations()->sync($id_variations); // mise à jour propre
+            $article->variations()->sync($id_variations);
         }
 
         return response()->json([
@@ -289,42 +353,84 @@ class ArticleController extends Controller
             'data' => $article->load('categories', 'variations'),
             'message' => 'Article mis à jour avec succès.'
         ]);
-    }
 
-    public function trier_par_prix_moinsCher_cher(){
-        $article = Article::orderBy('prix', 'asc')->get();
-        if($article){
-            return response()->json([
-                'success' => true,
-                'data' => $article->load('categories', 'variations'),
-                'message' => 'Article trié du moins cher au plus cher'
-            ]);
-        }
-        else{
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la mise à jour de l’article.',
+            'erreur' => $e->getMessage()
+        ], 500);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur inattendue est survenue.',
+            'erreur' => $e->getMessage()
+        ], 500);
+    }
+}
+    public function trier_par_prix_moinsCher_cher()
+{
+    try {
+        $articles = Article::orderBy('prix', 'asc')->get();
+
+        if ($articles->isEmpty()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Echec lors du trix du prix de l’article. (moins cher au plus cher)'
+                'message' => 'Aucun article trouvé à trier (du moins cher au plus cher).'
             ]);
         }
-    }
 
-    public function trier_par_prix_cher_moinsCher(){
-        $article = Article::orderBy('prix', 'desc')->get();
-        if($article){
-            return response()->json([
-                'success' => true,
-                'data' => $article->load('categories', 'variations'),
-                'message' => 'Article trié du plus cher au moins cher'
-            ]);
-        }
-        else{
+        return response()->json([
+            'success' => true,
+            'data' => $articles->load('categories', 'variations'),
+            'message' => 'Article trié du moins cher au plus cher.'
+        ]);
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors du tri des articles par prix croissant.',
+            'erreur' => $e->getMessage()
+        ], 500);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur inattendue est survenue.',
+            'erreur' => $e->getMessage()
+        ], 500);
+    }
+}
+
+public function trier_par_prix_cher_moinsCher()
+{
+    try {
+        $articles = Article::orderBy('prix', 'desc')->get();
+
+        if ($articles->isEmpty()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Echec lors du trix du prix de l’article. (plus cher au moins cher)'
+                'message' => 'Aucun article trouvé à trier (du plus cher au moins cher).'
             ]);
         }
+
+        return response()->json([
+            'success' => true,
+            'data' => $articles->load('categories', 'variations'),
+            'message' => 'Article trié du plus cher au moins cher.'
+        ]);
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors du tri des articles par prix décroissant.',
+            'erreur' => $e->getMessage()
+        ], 500);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur inattendue est survenue.',
+            'erreur' => $e->getMessage()
+        ], 500);
     }
 
 
-
+}
 }

@@ -18,10 +18,12 @@ class AuthController extends Controller
     //AUTHENTIFICATION CLIENT
 
     //INSCRIPTION CLIENT
-    public function register_clt(Request $request){
-        // Validation sans contrainte de `unique`
-        $request->validate([
-            'nom_clt' => 'required',
+    public function register_clt(Request $request)
+{
+    try {
+        // 1. Validation
+        $validatedData = $request->validate([
+            'nom_clt' => 'required|string|max:255',
             'email_clt' => 'required|email',
             'tel_clt' => 'required|digits:10',
             'password_clt' => 'required|min:6'
@@ -35,10 +37,10 @@ class AuthController extends Controller
             'password_clt.min' => 'Le mot de passe doit contenir au moins 6 caractères.',
         ]);
 
-        // Recherche d'un utilisateur existant avec ce téléphone ou email
-        $existing = User::where('email_clt', $request->email_clt)
-                        ->orWhere('tel_clt', $request->tel_clt)
-                        ->first();
+        // 2. Vérification de l'existence d'un compte
+        $existing = User::where('email_clt', $validatedData['email_clt'])
+            ->orWhere('tel_clt', $validatedData['tel_clt'])
+            ->first();
 
         if ($existing) {
             if ($existing->is_verify) {
@@ -47,98 +49,166 @@ class AuthController extends Controller
                     'message' => 'Cet email ou numéro est déjà utilisé par un compte vérifié.',
                 ], 409);
             } else {
-                $existing->delete(); // Supprime l’ancien compte non vérifié
+                $existing->delete(); // Supprimer compte non vérifié
             }
         }
 
-        // Génération du code OTP
+        // 3. Génération du code OTP
         $code_otp = rand(1000, 9999);
 
+        // 4. Création du compte client
+        $client = new User();
+        $client->nom_clt = $validatedData['nom_clt'];
+        $client->email_clt = $validatedData['email_clt'];
+        $client->tel_clt = $validatedData['tel_clt'];
+        $client->password_clt = Hash::make($validatedData['password_clt']);
+        $client->solde_tdl = 0;
+        $client->code_otp = $code_otp;
+        $client->otp_expires_at = now()->addMinutes(60);
+        $client->is_verify = false;
+        $client->save();
+
+        // 5. Envoi de l'email
         try {
-            $client = new User();
-            $client->nom_clt = $request->nom_clt;
-            $client->email_clt = $request->email_clt;
-            $client->tel_clt = $request->tel_clt;
-            $client->password_clt = Hash::make($request->password_clt);
-            $client->solde_tdl = 0;
-            $client->code_otp = $code_otp;
-            $client->otp_expires_at = now()->addMinutes(60);
-            $client->is_verify = false; // non vérifié à l’inscription
-            $client->save();
-
-            // Envoi de l'email OTP
             Mail::to($client->email_clt)->send(new OtpMail($code_otp));
+        } catch (\Exception $e) {
+            // Si l'email échoue, supprimer le compte et retourner une erreur
+            $client->delete();
 
-            return response()->json([
-                'success' => true,
-                'data'=> [
-                    'nom_clt' => $client->nom_clt,
-                    'email_clt' => $client->email_clt,
-                    'tel_clt' => $client->tel_clt,
-                    'created_at' => $client->created_at,
-                    'updated_at' => $client->updated_at
-                ],
-                'message' => 'Client enregistré avec succès. Un code OTP a été envoyé.',
-            ]);
-        } catch (QueryException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Enregistrement du client échoué',
-                'erreur' => $e->getMessage()
-            ]);
+                'message' => 'Erreur lors de l’envoi de l’email de confirmation. Veuillez réessayer.',
+            ], 500);
         }
+
+        // 6. Réponse finale
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'nom_clt' => $client->nom_clt,
+                'email_clt' => $client->email_clt,
+                'tel_clt' => $client->tel_clt,
+                'created_at' => $client->created_at,
+                'updated_at' => $client->updated_at
+            ],
+            'message' => 'Client enregistré avec succès. Un code OTP a été envoyé.',
+        ]);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur de validation.',
+            'errors' => $e->errors(),
+        ], 422);
+
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur inattendue est survenue. Veuillez réessayer.',
+            // 'erreur' => $e->getMessage() // Décommente uniquement en mode debug
+        ], 500);
     }
+}
+
 
 
 
     //VERIFICATION OTP CLIENT
-    public function verifyOtp(Request $request){
-        $request->validate([
+    public function verifyOtp(Request $request)
+{
+    try {
+        // 1. Validation des champs
+        $validated = $request->validate([
             'email_clt' => 'required|email',
             'code_otp' => 'required|digits:4',
+        ], [
+            'email_clt.required' => 'L’email est requis.',
+            'email_clt.email' => 'L’email n’est pas valide.',
+            'code_otp.required' => 'Le code OTP est requis.',
+            'code_otp.digits' => 'Le code OTP doit contenir exactement 4 chiffres.',
         ]);
 
-        $client = User::where('email_clt', $request->email_clt)->first();
+        // 2. Recherche de l’utilisateur
+        $client = User::where('email_clt', $validated['email_clt'])->first();
 
         if (!$client) {
-            return response()->json(['success' => false, 'message' => 'Utilisateur non trouvé']);
+            return response()->json([
+                'success' => false,
+                'message' => 'Aucun utilisateur trouvé avec cet email.',
+            ], 404);
         }
 
-        if ($client->code_otp !== $request->code_otp) {
-            return response()->json(['success' => false, 'message' => 'Code OTP invalide']);
+        // 3. Vérification du code OTP
+        if ($client->code_otp !== $validated['code_otp']) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Le code OTP est invalide.',
+            ], 401);
         }
 
-        if ($client->otp_expires_at->isPast()) {
-            return response()->json(['success' => false, 'message' => 'Le code OTP a expiré']);
+        // 4. Vérification de l’expiration
+        if ($client->otp_expires_at && $client->otp_expires_at->isPast()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Le code OTP a expiré. Veuillez demander un nouveau code.',
+            ], 410);
         }
 
+        // 5. Mise à jour du compte client
         $client->email_verified_at = now();
         $client->code_otp = null;
         $client->otp_expires_at = null;
-        $client->is_verify= true;
+        $client->is_verify = true;
         $client->save();
 
-        //Token du client
+        // 6. Génération du token
         $token = $client->createToken('client-token')->plainTextToken;
 
+        // 7. Réponse
         return response()->json([
-            'success' => true, 
-            'data' => $client,
-            'token' => $token,
-            'message' => 'OTP vérifié avec succès'
+            'success' => true,
+            'message' => 'Code OTP vérifié avec succès.',
+            'data' => [
+                'client' => [
+                    'nom_clt' => $client->nom_clt,
+                    'email_clt' => $client->email_clt,
+                    'tel_clt' => $client->tel_clt,
+                ],
+                'token' => $token,
+            ]
         ]);
+
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur de validation.',
+            'errors' => $e->getMessage(),
+        ], 422);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur inattendue est survenue. Veuillez réessayer.',
+            // 'erreur' => $e->getMessage() // À activer en mode debug uniquement
+        ], 500);
     }
+}
+
 
     //RENVOYER LE CODE OTP 
-    public function resendOtp(Request $request){
-        $request->validate([
+    public function resendOtp(Request $request)
+{
+    try {
+        // 1. Validation des données
+        $validated = $request->validate([
             'email_clt' => 'required|email',
         ], [
             'email_clt.required' => 'L’email est obligatoire.',
             'email_clt.email' => 'L’email n’est pas valide.',
         ]);
 
-        $user = User::where('email_clt', $request->email_clt)->first();
+        // 2. Recherche de l’utilisateur
+        $user = User::where('email_clt', $validated['email_clt'])->first();
 
         if (!$user) {
             return response()->json([
@@ -154,99 +224,174 @@ class AuthController extends Controller
             ], 400);
         }
 
-        // Nouveau code OTP
+        // 3. Génération d’un nouveau code OTP
         $code_otp = rand(1000, 9999);
         $user->code_otp = $code_otp;
         $user->otp_expires_at = now()->addMinutes(60);
         $user->save();
 
-        // Envoi par mail
-        Mail::to($user->email_clt)->send(new OtpMail($code_otp));
+        // 4. Envoi du mail
+        try {
+            Mail::to($user->email_clt)->send(new OtpMail($code_otp));
+        } catch (QueryException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Une erreur est survenue lors de l’envoi de l’email. Veuillez réessayer plus tard.',
+                // 'erreur' => $e->getMessage() // À activer en mode debug si nécessaire
+            ], 500);
+        }
 
+        // 5. Succès
         return response()->json([
             'success' => true,
             'message' => 'Un nouveau code OTP a été envoyé à votre adresse email.'
         ]);
+
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur de validation.',
+            'errors' => $e->getMessage(),
+        ], 422);
+
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur inattendue est survenue. Veuillez réessayer.',
+            // 'erreur' => $e->getMessage() // Décommente si nécessaire
+        ], 500);
     }
+}
 
 
     //CONNEXION CLIENT
-    public function login_clt(Request $request){
-
-        $request->validate([
+    public function login_clt(Request $request)
+{
+    try {
+        // 1. Validation des données
+        $validated = $request->validate([
             'email_clt' => 'required|email',
             'password_clt' => 'required|min:6'
         ], [
             'email_clt.required' => 'L’email du client est obligatoire.',
+            'email_clt.email' => 'L’adresse email est invalide.',
             'password_clt.required' => 'Le mot de passe est obligatoire.',
             'password_clt.min' => 'Le mot de passe doit contenir au moins 6 caractères.',
         ]);
 
-        try{
-            $client = User::where('email_clt', $request->email_clt)->first();
-            if($client && Hash::check($request->password_clt, $client->password_clt) && $client->otp_expires_at == null){
-                //Token du client
-                $token = $client->createToken('client-token')->plainTextToken;
+        // 2. Recherche de l’utilisateur
+        $client = User::where('email_clt', $validated['email_clt'])->first();
 
-                return response()->json([
-                    'success' => true,
-                    'data' => $client,
-                    'message' => 'Client connecté avec succès',
-                    'token' => $token
-                ]);
-            }
-            else{
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Client non connecté.'
-                ]);
-            }
-        }
-        catch(QueryException $e){
-             return response()->json([
+        if (!$client) {
+            return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors de la connexion du client',
-                'erreur' => $e->getMessage()
-            ]);
+                'message' => 'Aucun client trouvé avec cet email.',
+            ], 404);
         }
+
+        // 3. Vérification du mot de passe
+        if (!Hash::check($validated['password_clt'], $client->password_clt)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Mot de passe incorrect.',
+            ], 401);
+        }
+
+        // 4. Vérification de la validation du compte (OTP)
+        if (!$client->is_verify) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Votre compte n’a pas encore été vérifié. Veuillez saisir le code OTP envoyé par mail.',
+            ], 403);
+        }
+
+        // 5. Génération du token
+        $token = $client->createToken('client-token')->plainTextToken;
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Connexion réussie.',
+            'data' => [
+                'nom_clt' => $client->nom_clt,
+                'email_clt' => $client->email_clt,
+                'tel_clt' => $client->tel_clt,
+                'solde_tdl' => $client->solde_tdl,
+            ],
+            'token' => $token
+        ]);
+
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur de validation.',
+            'errors' => $e->getMessage()
+        ], 422);
+
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur est survenue lors de la tentative de connexion.',
+            // 'erreur' => $e->getMessage() // À activer uniquement en debug
+        ], 500);
     }
+}
+
     
     //INFO DU CLIENT A PARTIR DE SON TOKEN
-    public function info_clt(Request $request){
+    public function info_clt(Request $request)
+{
+    try {
         $client = $request->user();
-        try{
-           if($client && $client->otp_expires_at == null){
-                $client = $request->user();
-                return response()->json([
-                    'success' => true,
-                    'data' => $client,
-                    'message' => 'Infos du client récupérées avec succès.'
-                ]);
-           }
-           else{
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Client non connecté'
-                ]);
-           }
-        }
-        catch(QueryException $e){
+
+        if (!$client) {
             return response()->json([
-                    'success' => false,
-                    'message' => 'Echec lors de la récupération des infos du client.',
-                    'erreur' => $e->getMessage()
-                ]);
+                'success' => false,
+                'message' => 'Utilisateur non authentifié.',
+            ], 401);
         }
+
+        if (!$client->is_verify) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Votre compte n’a pas encore été vérifié.',
+            ], 403);
+        }
+
+        // Réponse avec des données filtrées (sans champs sensibles)
+        return response()->json([
+            'success' => true,
+            'message' => 'Informations du client récupérées avec succès.',
+            'data' => [
+                'nom_clt' => $client->nom_clt,
+                'email_clt' => $client->email_clt,
+                'tel_clt' => $client->tel_clt,
+                'solde_tdl' => $client->solde_tdl,
+                'created_at' => $client->created_at,
+                'updated_at' => $client->updated_at,
+            ]
+        ]);
+
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la récupération des informations du client.',
+            // 'erreur' => $e->getMessage() // Active en debug
+        ], 500);
     }
+}
+
 
     //INSCRIPTIOIN BOUTIQUE
-    public function register_btq(Request $request){
-        $request->validate([
-            'nom_btq' => 'required',
-            'email_btq' => 'required|email|unique:boutiques',
-            'tel_btq' => 'required|digits:10|unique:boutiques',
-            'password_btq' => 'required'
-        ],[
+    public function register_btq(Request $request)
+{
+    try {
+        // 1. Validation des données
+        $validated = $request->validate([
+            'nom_btq' => 'required|string|max:255',
+            'email_btq' => 'required|email|unique:boutiques,email_btq',
+            'tel_btq' => 'required|digits:10|unique:boutiques,tel_btq',
+            'password_btq' => 'required|min:6'
+        ], [
             'nom_btq.required' => 'Le nom de la boutique est obligatoire.',
             'email_btq.required' => 'L’adresse email de la boutique est obligatoire.',
             'email_btq.email' => 'L’adresse email n’est pas valide.',
@@ -254,100 +399,133 @@ class AuthController extends Controller
             'tel_btq.required' => 'Le numéro de téléphone est obligatoire.',
             'tel_btq.digits' => 'Le numéro de téléphone doit contenir exactement 10 chiffres.',
             'tel_btq.unique' => 'Ce numéro de téléphone est déjà utilisé.',
-            'password_btq.required' => 'Le mot de passe est obligatoire.'
+            'password_btq.required' => 'Le mot de passe est obligatoire.',
+            'password_btq.min' => 'Le mot de passe doit contenir au moins 6 caractères.',
         ]);
 
-        try{
-            $boutique = new Boutique();
-            $boutique->nom_btq = $request->nom_btq;
-            $boutique->email_btq = $request->email_btq;
-            $boutique->tel_btq = $request->tel_btq;
-            $boutique->password_btq = Hash::make($request->password_btq);
-            $boutique->solde_tdl = 0;
-            $boutique->save();
+        // 2. Création de la boutique
+        $boutique = new Boutique();
+        $boutique->nom_btq = $validated['nom_btq'];
+        $boutique->email_btq = $validated['email_btq'];
+        $boutique->tel_btq = $validated['tel_btq'];
+        $boutique->password_btq = Hash::make($validated['password_btq']);
+        $boutique->solde_tdl = 0;
+        $boutique->save();
 
-            unset($boutique->password_btq);
+        // 3. Suppression du champ mot de passe de la réponse
+        $boutique->makeHidden(['password_btq']);
 
-            $token = $boutique->createToken('boutique-token')->plainTextToken;
+        // 4. Génération du token
+        $token = $boutique->createToken('boutique-token')->plainTextToken;
 
-            return response()->json([
-                'success' => true,
-                'data' => $boutique,
-                'message' => 'Boutique enregistré avec succès' ,
-                'token' => $token
-            ]);
-        }
-        catch(QueryException $e){
-            return response()->json([
-                'success' => false,
-                'message' => 'Boutique non enregistré.',
-                'erreur' => $e->getMessage()
-            ]);
-        }
+        return response()->json([
+            'success' => true,
+            'message' => 'Boutique enregistrée avec succès.',
+            'data' => $boutique,
+            'token' => $token,
+        ]);
+
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur de validation.',
+            'errors' => $e->getMessage(),
+        ], 422);
+
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Échec lors de l’enregistrement de la boutique.',
+            // 'erreur' => $e->getMessage(), // à activer uniquement en debug
+        ], 500);
     }
+}
+
 
     //CONNEXION BOUTIQUE
-    public function login_btq(Request $request){
-
-        $request->validate([
+   public function login_btq(Request $request)
+{
+    try {
+        // 1. Validation des champs
+        $validated = $request->validate([
             'email_btq' => 'required|email',
-            'password_btq' => 'required'
-        ],[
+            'password_btq' => 'required',
+        ], [
             'email_btq.required' => 'L’adresse email de la boutique est obligatoire.',
             'email_btq.email' => 'L’adresse email n’est pas valide.',
-            'email_btq.unique' => 'Cette adresse email est déjà utilisée.',
-            'password_btq.required' => 'Le mot de passe est obligatoire.'
+            'password_btq.required' => 'Le mot de passe est obligatoire.',
         ]);
 
-        try{
-            $boutique = Boutique::where('email_btq', $request->email_btq)->first();
+        // 2. Récupération de la boutique
+        $boutique = Boutique::where('email_btq', $validated['email_btq'])->first();
 
-            $token = $boutique->createToken('boutique-token')->plainTextToken;
-
-            if($boutique && Hash::check($request->password_btq, $boutique->password_btq)){
-                return response()->json([
-                    'success' => true,
-                    'data' => $boutique,
-                    'message' => 'Boutique connecté',
-                    'token' => $token
-                ]);
-            }
-        }
-        catch(QueryException $e){
+        if (!$boutique || !Hash::check($validated['password_btq'], $boutique->password_btq)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Echec lors de la connexion de la boutique',
-                'erreur' => $e->getMessage()
-            ]);
+                'message' => 'Identifiants invalides.',
+            ], 401);
         }
-    }
 
-    public function info_btq(Request $request){
-        $boutique = $request->user();
-        try{
-           if($boutique && $boutique->otp_expires_at == null){
-                $boutique = $request->user();
-                return response()->json([
-                    'success' => true,
-                    'data' => $boutique,
-                    'message' => 'Infos de la boutique récupérées avec succès.'
-                ]);
-           }
-           else{
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Boutique non connecté'
-                ]);
-           }
-        }
-        catch(QueryException $e){
-            return response()->json([
-                    'success' => false,
-                    'message' => 'Echec lors de la récupération des infos de la boutique.',
-                    'erreur' => $e->getMessage()
-                ]);
-        }
+        // 3. Création du token si les identifiants sont corrects
+        $token = $boutique->createToken('boutique-token')->plainTextToken;
+
+        // 4. Suppression du champ mot de passe de la réponse
+        $boutique->makeHidden(['password_btq']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Connexion réussie.',
+            'data' => $boutique,
+            'token' => $token,
+        ]);
+
+    } catch (QueryException$e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur de validation.',
+            'errors' => $e->getMessage(),
+        ], 422);
+
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur est survenue lors de la tentative de connexion.',
+            // 'erreur' => $e->getMessage() // à activer en debug si besoin
+        ], 500);
     }
+}
+
+
+    public function info_btq(Request $request)
+{
+    try {
+        $boutique = $request->user();
+
+        if (!$boutique) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Boutique non authentifiée.',
+            ], 401);
+        }
+
+        // Cacher le mot de passe dans la réponse
+        $boutique->makeHidden(['password_btq']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Informations de la boutique récupérées avec succès.',
+            'data' => $boutique
+        ]);
+
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la récupération des informations de la boutique.',
+            // 'erreur' => $e->getMessage() // à activer uniquement en debug
+        ], 500);
+    }
+}
+
 
     // //INSCRIPTION LIVREUR
     // public function register_liv(Request $request)
