@@ -21,4 +21,10 @@ class Commune extends Model
     public function ville(){
         return $this->belongsTo(Ville::class, 'id_ville');
     }
+
+    public function commandes(){
+        return $this->hasMany(Commande::class, 'id_commune');
+    }
+
+
 }

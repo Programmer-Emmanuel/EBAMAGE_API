@@ -12,10 +12,9 @@ class CategorieController extends Controller
 public function ajout_categorie(Request $request)
 {
     $request->validate([
-        'nom_categorie' => 'required|min:5'
+        'nom_categorie' => 'required'
     ], [
         'nom_categorie.required' => 'Le nom de la catégorie est obligatoire.',
-        'nom_categorie.min' => 'Le nom de la catégorie doit avoir au minimum 5 caractères.'
     ]);
 
     try {
@@ -57,8 +56,9 @@ public function ajout_categorie(Request $request)
             ]);
         } else {
             return response()->json([
-                'success' => false,
-                'message' => 'Aucune catégorie trouvée pour cette boutique.'
+                'success' => true,
+                'data' => $categories,
+                'message' => 'Aucune catégorie trouvée.'
             ]);
         }
     } catch (QueryException $e) {

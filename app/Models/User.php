@@ -65,4 +65,9 @@ class User extends Authenticatable
             'password_clt' => 'hashed',
         ];
     }
+
+    public function commandes(){
+        return $this->hasMany(Commande::class, 'id_clt');
+    }
+
 }

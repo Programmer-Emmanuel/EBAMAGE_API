@@ -4,6 +4,7 @@ use App\Http\Controllers\ArticleController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategorieController;
 use App\Http\Controllers\ClientController;
+use App\Http\Controllers\CommandeController;
 use App\Http\Controllers\RechercheController;
 use App\Http\Controllers\VariationController;
 use App\Http\Controllers\VilleCommuneController;
@@ -92,6 +93,23 @@ Route::prefix('/api')->group(function(){
     Route::post('/ajout/commune', [VilleCommuneController::class, 'ajout_commune']);
     Route::get('/communes', [VilleCommuneController::class, 'liste_commune']);
     Route::get('/commune/{hashid}/ville', [VilleCommuneController::class, 'communesParVille']);
+
+
+    Route::middleware('auth:client')->group(function(){
+        Route::post('/passer/commande', [CommandeController::class, 'commande_ajout']);
+    });
+    Route::get('/commandes', [CommandeController::class, 'liste_commande']);
+    Route::get('/commande/{hashid}', [CommandeController::class, 'commande']);
+
+    //Changer le statut des commandes
+    Route::post('/commande/{hashid}/reception', [CommandeController::class, 'edit_statut_reception']);
+    Route::post('/commande/{hashid}/confirme', [CommandeController::class, 'edit_statut_confirme']);
+    Route::post('/commande/{hashid}/annule', [CommandeController::class, 'edit_statut_annule']);
+
+    //Liste des tendances
+    Route::get('/articles/tendances', [CommandeController::class, 'articles_plus_commandes_paginate']);
+    //Articles recommandés
+    Route::get('/articles/recommandes', [CommandeController::class, 'articles_recommandes']);
 
 
 });

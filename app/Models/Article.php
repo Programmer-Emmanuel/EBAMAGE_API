@@ -37,4 +37,9 @@ class Article extends Model
         return $this->belongsToMany(Variation::class, 'article_variations', 'id_article', 'id_variation');
     }
 
+    public function commandes(){
+        return $this->hasMany(Commande::class, 'id_article');
+    }
+
+
 }

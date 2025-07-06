@@ -32,6 +32,10 @@ class Boutique extends Authenticatable
         return $this->hasMany(Article::class, 'id_btq');
     }
 
+    public function commandes(){
+        return $this->hasMany(Commande::class, 'id_btq');
+    }
+
 
 
     protected function casts(): array
