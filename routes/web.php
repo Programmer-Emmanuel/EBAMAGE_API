@@ -107,7 +107,7 @@ Route::prefix('/api')->group(function(){
     Route::post('/commande/{hashid}/annule', [CommandeController::class, 'edit_statut_annule']);
 
     //Liste des tendances
-    Route::get('/articles/tendances', [CommandeController::class, 'articles_plus_commandes_paginate']);
+    Route::get('/articles/tendances', [CommandeController::class, 'articles_tendance']);
     //Articles recommandés
     Route::get('/articles/recommandes', [CommandeController::class, 'articles_recommandes']);
 

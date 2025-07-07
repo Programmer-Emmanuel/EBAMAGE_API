@@ -16,6 +16,7 @@ class ArticleController extends Controller
     $request->validate([
         'nom_article' => 'required',
         'prix' => 'required|numeric|min:10',
+        'old_price' => 'nullable|numeric|min:10',
         'image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
         'description' => 'required|min:10',
         'id_categories' => 'required|array',
@@ -27,6 +28,8 @@ class ArticleController extends Controller
         'prix.required' => 'Le prix est obligatoire.',
         'prix.numeric' => 'Le prix doit être un nombre.',
         'prix.min' => 'Le prix minimum autorisé est de 10.',
+        'old_price.numeric' => 'L’ancien prix doit être un nombre.',
+        'old_price.min' => 'L’ancien prix minimum autorisé est de 10.',
         'image.required' => 'L’image est obligatoire.',
         'image.image' => 'Le fichier doit être une image.',
         'image.mimes' => 'L’image doit être au format jpeg, png ou jpg.',
@@ -46,6 +49,7 @@ class ArticleController extends Controller
         $article = new Article();
         $article->nom_article = $request->nom_article;
         $article->prix = $request->prix;
+        $article->old_price = $request->old_price;
         $article->image = $image_article;
         $article->description = $request->description;
         $article->id_btq = auth('boutique')->id();
@@ -213,6 +217,7 @@ class ArticleController extends Controller
                 'id' => $article->hashid,
                 'nom_article' => $article->nom_article,
                 'prix' => $article->prix,
+                'old_price' => $article->old_price,
                 'description' => $article->description,
                 'image' => $article->image,
                 'categorie' => $categorie->nom_categorie,
@@ -289,6 +294,7 @@ class ArticleController extends Controller
     $request->validate([
         'nom_article' => 'required',
         'prix' => 'required|numeric|min:10',
+        'old_price' => 'nullable|numeric|min:10',
         'description' => 'required|min:10',
         'image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         'id_categories' => 'nullable|array',
@@ -322,6 +328,7 @@ class ArticleController extends Controller
 
         $article->nom_article = $request->nom_article;
         $article->prix = $request->prix;
+        $article->old_price = $request->old_price;
         $article->description = $request->description;
 
         // Image (facultative)

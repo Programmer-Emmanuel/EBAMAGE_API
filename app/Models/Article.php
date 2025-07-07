@@ -19,6 +19,7 @@ class Article extends Model
     protected $fillable = [
         'nom_article',
         'prix',
+        'old_price',
         'image',
         'description',
         'id_btq'

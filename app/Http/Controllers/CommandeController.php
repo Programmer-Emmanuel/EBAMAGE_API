@@ -317,49 +317,44 @@ class CommandeController extends Controller
         }
     }
 
-    public function articles_plus_commandes_paginate(){
-        try {
-            // On fait une jointure articles-commandes, on groupe par article et on somme les quantités,
-            // puis on trie par total_quantite décroissant et on pagine par 3
-            $articles = Article::select(
-                    'articles.id',
-                    'articles.nom_article',
-                    'articles.prix',
-                    'articles.description',
-                    'articles.image',
-                    DB::raw('SUM(commandes.quantite) as total_commandes')
-                )
-                ->join('commandes', 'commandes.id_article', '=', 'articles.id')
-                ->groupBy('articles.id', 'articles.nom_article', 'articles.prix', 'articles.description', 'articles.image')
-                ->orderByDesc('total_commandes')
-                ->paginate(3);
+    public function articles_tendance()
+{
+    try {
+        // Sélection des 10 articles les plus commandés (sans paginate)
+        $articles = Article::select(
+                'articles.id',
+                'articles.nom_article',
+                'articles.prix',
+                'articles.description',
+                'articles.image',
+                DB::raw('SUM(commandes.quantite) as total_commandes')
+            )
+            ->join('commandes', 'commandes.id_article', '=', 'articles.id')
+            ->groupBy('articles.id', 'articles.nom_article', 'articles.prix', 'articles.description', 'articles.image')
+            ->orderByDesc('total_commandes')
+            ->limit(10)
+            ->get();
 
-            if ($articles->isEmpty()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Aucun article commandé trouvé.',
-                ], 404);
-            }
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Liste paginée des articles tendances.',
-                'data' => $articles->items(),
-                'pagination' => [
-                    'current_page' => $articles->currentPage(),
-                    'last_page' => $articles->lastPage(),
-                    'per_page' => $articles->perPage(),
-                    'total' => $articles->total(),
-                ]
-            ]);
-        } catch (\Exception $e) {
+        if ($articles->isEmpty()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Une erreur est survenue lors de la récupération.',
-                'error' => config('app.debug') ? $e->getMessage() : null,
-            ], 500);
+                'message' => 'Aucun article commandé trouvé.',
+            ], 404);
         }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Top 10 des articles les plus commandés.',
+            'data' => $articles,
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur est survenue lors de la récupération.',
+            'error' => config('app.debug') ? $e->getMessage() : null,
+        ], 500);
     }
+}
 
 
     public function articles_recommandes()
@@ -367,7 +362,7 @@ class CommandeController extends Controller
         try {
             // Récupère 3 articles aléatoires
             $articles = Article::inRandomOrder()
-                ->limit(3)
+                ->limit(10)
                 ->get(['id', 'nom_article', 'prix', 'description', 'image']);
 
             if ($articles->isEmpty()) {

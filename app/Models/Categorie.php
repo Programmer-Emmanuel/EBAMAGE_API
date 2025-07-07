@@ -20,6 +20,7 @@ class Categorie extends Model
 
     protected $fillable = [
         'nom_categorie',
+        'image_categorie'
     ];
 
 
