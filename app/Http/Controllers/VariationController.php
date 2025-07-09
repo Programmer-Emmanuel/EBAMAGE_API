@@ -5,25 +5,28 @@ namespace App\Http\Controllers;
 use App\Models\Variation;
 use Illuminate\Http\Request;
 use Illuminate\Database\QueryException;
+use Illuminate\Validation\ValidationException;
 use Vinkla\Hashids\Facades\Hashids;
 
 class VariationController extends Controller
 {
     public function ajout_variation(Request $request)
 {
-    $request->validate([
-        'nom_variation' => 'required|string|min:2',
-        'lib_variation' => 'required|array|min:1',
-    ], [
-        'nom_variation.required' => 'Le nom de la variation est obligatoire.',
-        'lib_variation.required' => 'Les valeurs de la variation sont requises.',
-        'lib_variation.array' => 'Les valeurs doivent être un tableau.',
-    ]);
-
     try {
+        $validated = $request->validate([
+            'nom_variation' => 'required|string|in:taille,color,matiere,longueur',
+            'lib_variation' => 'required|array|min:1',
+        ], [
+            'nom_variation.required' => 'Le nom de la variation est obligatoire.',
+            'nom_variation.in' => 'Le nom de la variation doit être "taille", "color", "matiere" ou "longueur".',
+            'lib_variation.required' => 'Les valeurs de la variation sont requises.',
+            'lib_variation.array' => 'Les valeurs doivent être un tableau.',
+            'lib_variation.min' => 'Il faut au moins une valeur pour la variation.',
+        ]);
+
         $variation = new Variation();
-        $variation->nom_variation = $request->nom_variation;
-        $variation->lib_variation = json_encode($request->lib_variation);
+        $variation->nom_variation = $validated['nom_variation'];
+        $variation->lib_variation = json_encode($validated['lib_variation']);
         $variation->id_btq = auth('boutique')->id();
         $variation->save();
 
@@ -31,13 +34,22 @@ class VariationController extends Controller
             'success' => true,
             'data' => $variation,
             'message' => 'Variation ajoutée avec succès.'
-        ]);
+        ], 201);
+
+    } catch (ValidationException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur de validation.',
+            'erreur' => $e->errors()
+        ], 422);
+        
     } catch (QueryException $e) {
         return response()->json([
             'success' => false,
-            'message' => 'Erreur lors de l’enregistrement de la variation.',
+            'message' => 'Erreur lors de l’enregistrement en base de données.',
             'erreur' => $e->getMessage()
         ], 500);
+
     } catch (\Exception $e) {
         return response()->json([
             'success' => false,
@@ -123,7 +135,7 @@ public function variation($hashid)
     public function update_variation(Request $request, $hashid)
 {
     $request->validate([
-        'nom_variation' => 'required|string|min:2',
+        'nom_variation' => 'required|string|in:taille,color,matiere,longueur',
         'lib_variation' => 'required|array|min:1',
     ], [
         'nom_variation.required' => 'Le nom de la variation est obligatoire.',

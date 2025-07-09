@@ -76,6 +76,7 @@ class CommandeController extends Controller
                     'article' => [
                         'nom' => $commande->article->nom_article,
                         'prix' => $commande->article->prix,
+                        'old_price' => $commande->article->old_price,
                         'image' => $commande->article->image,
                         'description' => $commande->article->description,
                         'hashid' => Hashids::encode($commande->article->id),
@@ -141,6 +142,7 @@ class CommandeController extends Controller
                 'article' => [
                     'nom' => $commande->article->nom_article,
                     'prix' => $commande->article->prix,
+                    'old_price' => $commande->article->old_price,
                     'image' => $commande->article->image,
                     'description' => $commande->article->description,
                     'hashid' => Hashids::encode($commande->article->id),
@@ -220,6 +222,7 @@ class CommandeController extends Controller
                     'article' => [
                         'nom' => $commande->article->nom_article,
                         'prix' => $commande->article->prix,
+                        'old_price' => $commande->article->old_price,
                         'image' => $commande->article->image,
                         'description' => $commande->article->description,
                         'hashid' => Hashids::encode($commande->article->id),
@@ -325,12 +328,13 @@ class CommandeController extends Controller
                 'articles.id',
                 'articles.nom_article',
                 'articles.prix',
+                'articles.old_price',
                 'articles.description',
                 'articles.image',
                 DB::raw('SUM(commandes.quantite) as total_commandes')
             )
             ->join('commandes', 'commandes.id_article', '=', 'articles.id')
-            ->groupBy('articles.id', 'articles.nom_article', 'articles.prix', 'articles.description', 'articles.image')
+            ->groupBy('articles.id', 'articles.nom_article', 'articles.prix', 'articles.old_price', 'articles.description', 'articles.image')
             ->orderByDesc('total_commandes')
             ->limit(10)
             ->get();
@@ -363,7 +367,7 @@ class CommandeController extends Controller
             // Récupère 3 articles aléatoires
             $articles = Article::inRandomOrder()
                 ->limit(10)
-                ->get(['id', 'nom_article', 'prix', 'description', 'image']);
+                ->get(['id', 'nom_article', 'prix', 'old_price', 'description', 'image']);
 
             if ($articles->isEmpty()) {
                 return response()->json([
