@@ -11,13 +11,14 @@ use Vinkla\Hashids\Facades\Hashids;
 
 class ArticleController extends Controller
 {
-    public function ajout_article(Request $request){
+    public function ajout_article(Request $request)
+    {
         $request->validate([
             'nom_article' => 'required',
             'prix' => 'required|numeric|min:10',
             'old_price' => 'nullable|numeric|min:10',
-            'images' => 'required|array',
-            'images.*' => 'image|mimes:jpeg,png,jpg|max:2048',
+            'image' => 'required|array',
+            'image.*' => 'image|mimes:jpeg,png,jpg|max:2048',
             'description' => 'required|min:10',
             'id_categories' => 'required|array',
             'id_categories.*' => 'string',
@@ -30,11 +31,11 @@ class ArticleController extends Controller
             'prix.min' => 'Le prix minimum autorisé est de 10.',
             'old_price.numeric' => 'L\'ancien prix doit être un nombre.',
             'old_price.min' => 'L\'ancien prix minimum autorisé est de 10.',
-            'images.required' => 'Au moins une image est obligatoire.',
-            'images.array' => 'Les images doivent être envoyées sous forme de tableau.',
-            'images.*.image' => 'Chaque fichier doit être une image.',
-            'images.*.mimes' => 'Les images doivent être au format jpeg, png ou jpg.',
-            'images.*.max' => 'La taille maximale de chaque image est 2 Mo.',
+            'image.required' => 'Au moins une image est obligatoire.',
+            'image.array' => 'Les images doivent être envoyées sous forme de tableau.',
+            'image.*.image' => 'Chaque fichier doit être une image.',
+            'image.*.mimes' => 'Les images doivent être au format jpeg, png ou jpg.',
+            'image.*.max' => 'La taille maximale de chaque image est 2 Mo.',
             'description.required' => 'La description est obligatoire.',
             'description.min' => 'La description doit contenir au moins 10 caractères.',
             'id_categories.required' => 'Les catégories sont obligatoires.',
@@ -45,7 +46,7 @@ class ArticleController extends Controller
         ]);
 
         $uploadedImages = [];
-        foreach ($request->file('images') as $image) {
+        foreach ($request->file('image') as $image) {
             $uploadedImages[] = $this->uploadImageToHosting($image);
         }
 
@@ -54,11 +55,12 @@ class ArticleController extends Controller
             $article->nom_article = $request->nom_article;
             $article->prix = $request->prix;
             $article->old_price = $request->old_price;
-            $article->images = $uploadedImages;
+            $article->image = json_encode($uploadedImages);
             $article->description = $request->description;
             $article->id_btq = auth('boutique')->id();
             $article->save();
 
+            // Gestion des catégories
             $id_categories = collect($request->id_categories)->map(function ($hashid) {
                 return Hashids::decode($hashid)[0] ?? null;
             })->filter();
@@ -67,32 +69,49 @@ class ArticleController extends Controller
                 $article->categories()->attach($id_categories);
             }
 
+            // Gestion des variations
             if ($request->has('id_variations')) {
                 $id_variations = collect($request->id_variations)->map(function ($hashid) {
                     return Hashids::decode($hashid)[0] ?? null;
                 })->filter();
 
-                if ($id_variations->isNotEmpty()) {
-                    $article->variations()->attach($id_variations);
+                // Vérification que les variations existent
+                $existingVariations = \App\Models\Variation::whereIn('id', $id_variations)->pluck('id');
+                if ($existingVariations->isNotEmpty()) {
+                    $article->variations()->attach($existingVariations);
                 }
             }
 
+            // Décodage des images pour la réponse
+            $articleData = $article->toArray();
+            $articleData['image'] = json_decode($article->image, true);
+
             return response()->json([
                 'success' => true,
-                'data' => $article->load('categories', 'variations'),
+                'data' => array_merge($articleData, [
+                    'categories' => $article->categories,
+                    'variations' => $article->variations
+                ]),
                 'message' => 'Article enregistré avec succès.'
             ]);
-        } 
-        catch (QueryException $e) {
+
+        } catch (QueryException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Erreur lors de l\'enregistrement de l\'article',
                 'erreur' => $e->getMessage()
             ], 500);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Une erreur inattendue est survenue',
+                'erreur' => $e->getMessage()
+            ], 500);
         }
     }
 
-    private function uploadImageToHosting($image){
+    private function uploadImageToHosting($image)
+    {
         $apiKey = '9b1ab6564d99aab6418ad53d3451850b';
 
         if (!$image->isValid()) {
@@ -130,7 +149,7 @@ class ArticleController extends Controller
                     'nom_article' => $article->nom_article,
                     'prix' => $article->prix,
                     'old_price' => $article->old_price,
-                    'images' => $article->images, // Modifié pour renvoyer un tableau d'images
+                    'image' => json_decode($article->image, true),
                     'description' => $article->description,
                     'created_at' => $article->created_at,
                     'updated_at' => $article->updated_at,
@@ -146,17 +165,11 @@ class ArticleController extends Controller
                 'data' => $formatted,
                 'message' => 'Articles récupérés avec succès.'
             ]);
-        } catch (QueryException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Erreur lors de la récupération des articles.',
-                'erreur' => $e->getMessage(),
-            ], 500);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Une erreur inattendue est survenue.',
-                'erreur' => $e->getMessage(),
+                'message' => 'Une erreur est survenue',
+                'erreur' => $e->getMessage()
             ], 500);
         }
     }
@@ -179,77 +192,60 @@ class ArticleController extends Controller
                 ]);
             }
 
+            // Formatage des articles similaires
+            $formatArticle = function ($art) {
+                return [
+                    'nom_article' => $art->nom_article,
+                    'prix' => $art->prix,
+                    'old_price' => $art->old_price,
+                    'image' => json_decode($art->image, true),
+                    'description' => $art->description,
+                    'created_at' => $art->created_at,
+                    'updated_at' => $art->updated_at,
+                    'hashid' => $art->hashid,
+                ];
+            };
+
             $autre_articles = Article::where('id_btq', $article->id_btq)
                 ->where('id', '!=', $article->id)
                 ->get()
-                ->map(function ($art) {
-                    return [
-                        'nom_article' => $art->nom_article,
-                        'prix' => $art->prix,
-                        'old_price' => $art->old_price,
-                        'images' => $art->images, // Modifié pour renvoyer un tableau d'images
-                        'description' => $art->description,
-                        'created_at' => $art->created_at,
-                        'updated_at' => $art->updated_at,
-                        'hashid' => $art->hashid,
-                    ];
-                });
-
-            $categorie_id = optional($article->categories->first())->id;
+                ->map($formatArticle);
 
             $articles_meme_categorie = [];
+            $categorie_id = optional($article->categories->first())->id;
 
             if ($categorie_id) {
                 $articles_meme_categorie = Article::whereHas('categories', function ($q) use ($categorie_id) {
-                        $q->where('categories.id', $categorie_id);
-                    })
-                    ->where('id', '!=', $article->id)
-                    ->get()
-                    ->map(function ($art) {
-                        return [
-                            'nom_article' => $art->nom_article,
-                            'prix' => $art->prix,
-                            'old_price' => $art->old_price,
-                            'images' => $art->images, // Modifié pour renvoyer un tableau d'images
-                            'description' => $art->description,
-                            'created_at' => $art->created_at,
-                            'updated_at' => $art->updated_at,
-                            'hashid' => $art->hashid,
-                        ];
-                    });
+                    $q->where('categories.id', $categorie_id);
+                })
+                ->where('id', '!=', $article->id)
+                ->get()
+                ->map($formatArticle);
             }
-
-            $formattedArticle = [
-                'nom_article' => $article->nom_article,
-                'prix' => $article->prix,
-                'old_price' => $article->old_price,
-                'images' => $article->images, // Modifié pour renvoyer un tableau d'images
-                'description' => $article->description,
-                'created_at' => $article->created_at,
-                'updated_at' => $article->updated_at,
-                'hashid' => $article->hashid,
-                'nom_btq' => $article->boutique->nom_btq ?? null,
-                'categories' => $article->categories,
-                'variations' => $article->variations,
-            ];
 
             return response()->json([
                 'success' => true,
-                'data' => $formattedArticle,
+                'data' => [
+                    'nom_article' => $article->nom_article,
+                    'prix' => $article->prix,
+                    'old_price' => $article->old_price,
+                    'image' => json_decode($article->image, true),
+                    'description' => $article->description,
+                    'created_at' => $article->created_at,
+                    'updated_at' => $article->updated_at,
+                    'hashid' => $article->hashid,
+                    'nom_btq' => $article->boutique->nom_btq ?? null,
+                    'categories' => $article->categories,
+                    'variations' => $article->variations,
+                ],
                 'communs' => $autre_articles,
                 'similaires' => $articles_meme_categorie,
                 'message' => 'Article trouvé.'
             ]);
-        } catch (QueryException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Erreur lors de la récupération de l\'article.',
-                'erreur' => $e->getMessage()
-            ], 500);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Une erreur inattendue est survenue.',
+                'message' => 'Une erreur est survenue',
                 'erreur' => $e->getMessage()
             ], 500);
         }
@@ -280,7 +276,7 @@ class ArticleController extends Controller
                     'prix' => $article->prix,
                     'old_price' => $article->old_price,
                     'description' => $article->description,
-                    'images' => $article->images, // Modifié pour renvoyer un tableau d'images
+                    'image' => json_decode($article->images, true),
                     'categorie' => $categorie->nom_categorie,
                 ];
             });
@@ -290,62 +286,10 @@ class ArticleController extends Controller
                 'data' => $articles,
                 'message' => 'Articles de la catégorie récupérés avec succès.'
             ]);
-        } catch (QueryException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Erreur lors de la récupération des articles par catégorie.',
-                'erreur' => $e->getMessage()
-            ], 500);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Une erreur inattendue est survenue.',
-                'erreur' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    public function delete_article($hashid)
-    {
-        try {
-            $id = Hashids::decode($hashid)[0] ?? null;
-
-            if (!$id) {
-                return response()->json(['message' => 'ID invalide'], 400);
-            }
-
-            $article = Article::find($id);
-
-            if (!$article) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Article introuvable.'
-                ]);
-            }
-
-            if ($article->id_btq !== auth('boutique')->id()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Vous n\'êtes pas autorisé à supprimer cet article.'
-                ]);
-            }
-
-            $article->delete();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Article supprimé avec succès.'
-            ]);
-        } catch (QueryException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Erreur lors de la suppression de l\'article.',
-                'erreur' => $e->getMessage()
-            ], 500);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Une erreur inattendue est survenue.',
+                'message' => 'Une erreur est survenue',
                 'erreur' => $e->getMessage()
             ], 500);
         }
@@ -358,8 +302,8 @@ class ArticleController extends Controller
             'prix' => 'required|numeric|min:10',
             'old_price' => 'nullable|numeric|min:10',
             'description' => 'required|min:10',
-            'images' => 'nullable|array',
-            'images.*' => 'image|mimes:jpeg,png,jpg|max:2048',
+            'image' => 'nullable|array',
+            'image.*' => 'image|mimes:jpeg,png,jpg|max:2048',
             'id_categories' => 'nullable|array',
             'id_categories.*' => 'string',
             'id_variations' => 'nullable|array',
@@ -394,53 +338,53 @@ class ArticleController extends Controller
             $article->old_price = $request->old_price;
             $article->description = $request->description;
 
-            // Mise à jour des images (facultative)
             if ($request->hasFile('images')) {
                 $uploadedImages = [];
                 foreach ($request->file('images') as $image) {
                     $uploadedImages[] = $this->uploadImageToHosting($image);
                 }
-                $article->images = $uploadedImages;
+                $article->image = json_encode($uploadedImages);
             }
 
             $article->save();
 
-            // MAJ des catégories (si fournies)
             if ($request->has('id_categories')) {
-                $id_categories = collect($request->id_categories)->map(function ($hashid) {
-                    return Hashids::decode($hashid)[0] ?? null;
-                })->filter();
+                $id_categories = collect($request->id_categories)
+                    ->map(fn($hashid) => Hashids::decode($hashid)[0] ?? null)
+                    ->filter();
                 $article->categories()->sync($id_categories);
             }
 
-            // MAJ des variations (si fournies)
             if ($request->has('id_variations')) {
-                $id_variations = collect($request->id_variations)->map(function ($hashid) {
-                    return Hashids::decode($hashid)[0] ?? null;
-                })->filter();
+                $id_variations = collect($request->id_variations)
+                    ->map(fn($hashid) => Hashids::decode($hashid)[0] ?? null)
+                    ->filter();
                 $article->variations()->sync($id_variations);
             }
 
+            // Décodage des images pour la réponse
+            $articleData = $article->toArray();
+            $articleData['image'] = json_decode($article->image, true);
+
             return response()->json([
                 'success' => true,
-                'data' => $article->load('categories', 'variations'),
+                'data' => array_merge($articleData, [
+                    'categories' => $article->categories,
+                    'variations' => $article->variations
+                ]),
                 'message' => 'Article mis à jour avec succès.'
             ]);
 
-        } catch (QueryException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Erreur lors de la mise à jour de l\'article.',
-                'erreur' => $e->getMessage()
-            ], 500);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Une erreur inattendue est survenue.',
+                'message' => 'Une erreur est survenue',
                 'erreur' => $e->getMessage()
             ], 500);
         }
     }
+
+
 
     public function trier_par_prix_moinsCher_cher()
     {

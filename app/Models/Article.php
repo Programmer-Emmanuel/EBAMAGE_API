@@ -20,7 +20,7 @@ class Article extends Model
         'nom_article',
         'prix',
         'old_price',
-        'image',
+        'images',
         'description',
         'id_btq'
     ];
