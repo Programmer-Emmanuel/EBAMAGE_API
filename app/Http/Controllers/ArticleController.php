@@ -17,8 +17,8 @@ class ArticleController extends Controller
             'nom_article' => 'required',
             'prix' => 'required|numeric|min:10',
             'old_price' => 'nullable|numeric|min:10',
-            'image' => 'required|array',
-            'image.*' => 'image|mimes:jpeg,png,jpg|max:2048',
+            'images' => 'required|array',
+            'images.*' => 'image|mimes:jpeg,png,jpg|max:2048',
             'description' => 'required|min:10',
             'id_categories' => 'required|array',
             'id_categories.*' => 'string',
@@ -31,11 +31,11 @@ class ArticleController extends Controller
             'prix.min' => 'Le prix minimum autorisé est de 10.',
             'old_price.numeric' => 'L\'ancien prix doit être un nombre.',
             'old_price.min' => 'L\'ancien prix minimum autorisé est de 10.',
-            'image.required' => 'Au moins une image est obligatoire.',
-            'image.array' => 'Les images doivent être envoyées sous forme de tableau.',
-            'image.*.image' => 'Chaque fichier doit être une image.',
-            'image.*.mimes' => 'Les images doivent être au format jpeg, png ou jpg.',
-            'image.*.max' => 'La taille maximale de chaque image est 2 Mo.',
+            'images.required' => 'Au moins une image est obligatoire.',
+            'images.array' => 'Les images doivent être envoyées sous forme de tableau.',
+            'images.*.image' => 'Chaque fichier doit être une image.',
+            'images.*.mimes' => 'Les images doivent être au format jpeg, png ou jpg.',
+            'images.*.max' => 'La taille maximale de chaque image est 2 Mo.',
             'description.required' => 'La description est obligatoire.',
             'description.min' => 'La description doit contenir au moins 10 caractères.',
             'id_categories.required' => 'Les catégories sont obligatoires.',
@@ -46,7 +46,7 @@ class ArticleController extends Controller
         ]);
 
         $uploadedImages = [];
-        foreach ($request->file('image') as $image) {
+        foreach ($request->file('images') as $image) {
             $uploadedImages[] = $this->uploadImageToHosting($image);
         }
 
@@ -55,7 +55,7 @@ class ArticleController extends Controller
             $article->nom_article = $request->nom_article;
             $article->prix = $request->prix;
             $article->old_price = $request->old_price;
-            $article->image = json_encode($uploadedImages);
+            $article->images = json_encode($uploadedImages);
             $article->description = $request->description;
             $article->id_btq = auth('boutique')->id();
             $article->save();
@@ -84,7 +84,7 @@ class ArticleController extends Controller
 
             // Décodage des images pour la réponse
             $articleData = $article->toArray();
-            $articleData['image'] = json_decode($article->image, true);
+            $articleData['images'] = json_decode($article->images, true);
 
             return response()->json([
                 'success' => true,
@@ -149,7 +149,7 @@ class ArticleController extends Controller
                     'nom_article' => $article->nom_article,
                     'prix' => $article->prix,
                     'old_price' => $article->old_price,
-                    'image' => json_decode($article->image, true),
+                    'images' => json_decode($article->images, true),
                     'description' => $article->description,
                     'created_at' => $article->created_at,
                     'updated_at' => $article->updated_at,
@@ -198,13 +198,14 @@ class ArticleController extends Controller
                     'nom_article' => $art->nom_article,
                     'prix' => $art->prix,
                     'old_price' => $art->old_price,
-                    'image' => json_decode($art->image, true),
+                    'image' => collect(json_decode($art->images, true))->first(), // ✅ une seule image
                     'description' => $art->description,
                     'created_at' => $art->created_at,
                     'updated_at' => $art->updated_at,
                     'hashid' => $art->hashid,
                 ];
             };
+
 
             $autre_articles = Article::where('id_btq', $article->id_btq)
                 ->where('id', '!=', $article->id)
@@ -229,7 +230,7 @@ class ArticleController extends Controller
                     'nom_article' => $article->nom_article,
                     'prix' => $article->prix,
                     'old_price' => $article->old_price,
-                    'image' => json_decode($article->image, true),
+                    'images' => json_decode($article->images, true),
                     'description' => $article->description,
                     'created_at' => $article->created_at,
                     'updated_at' => $article->updated_at,
@@ -276,7 +277,7 @@ class ArticleController extends Controller
                     'prix' => $article->prix,
                     'old_price' => $article->old_price,
                     'description' => $article->description,
-                    'image' => json_decode($article->images, true),
+                    'images' => json_decode($article->images, true),
                     'categorie' => $categorie->nom_categorie,
                 ];
             });
@@ -302,8 +303,8 @@ class ArticleController extends Controller
             'prix' => 'required|numeric|min:10',
             'old_price' => 'nullable|numeric|min:10',
             'description' => 'required|min:10',
-            'image' => 'nullable|array',
-            'image.*' => 'image|mimes:jpeg,png,jpg|max:2048',
+            'images' => 'nullable|array',
+            'images.*' => 'image|mimes:jpeg,png,jpg|max:2048',
             'id_categories' => 'nullable|array',
             'id_categories.*' => 'string',
             'id_variations' => 'nullable|array',
@@ -343,7 +344,7 @@ class ArticleController extends Controller
                 foreach ($request->file('images') as $image) {
                     $uploadedImages[] = $this->uploadImageToHosting($image);
                 }
-                $article->image = json_encode($uploadedImages);
+                $article->images = json_encode($uploadedImages);
             }
 
             $article->save();
@@ -364,7 +365,7 @@ class ArticleController extends Controller
 
             // Décodage des images pour la réponse
             $articleData = $article->toArray();
-            $articleData['image'] = json_decode($article->image, true);
+            $articleData['images'] = json_decode($article->images, true);
 
             return response()->json([
                 'success' => true,

@@ -26,7 +26,7 @@ class VariationController extends Controller
 
         $variation = new Variation();
         $variation->nom_variation = $validated['nom_variation'];
-        $variation->lib_variation = json_encode($validated['lib_variation']);
+        $variation->lib_variation = $validated['lib_variation'];
         $variation->id_btq = auth('boutique')->id();
         $variation->save();
 
@@ -160,7 +160,7 @@ public function variation($hashid)
 
     try {
         $variation->nom_variation = $request->nom_variation;
-        $variation->lib_variation = json_encode($request->lib_variation);
+        $variation->lib_variation = $request->lib_variation;
         $variation->save();
 
         return response()->json([

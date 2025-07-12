@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('nom_article');
             $table->integer('prix');
             $table->integer('old_price')->nullable();
-            $table->json('image');
+            $table->json('images');
             $table->text('description');
             $table->unsignedBigInteger('id_btq');
 
