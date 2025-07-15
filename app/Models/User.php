@@ -70,4 +70,9 @@ class User extends Authenticatable
         return $this->hasMany(Commande::class, 'id_clt');
     }
 
+    public function paniers(){
+        return $this->hasMany(Panier::class, 'id_clt');
+    }
+
+
 }

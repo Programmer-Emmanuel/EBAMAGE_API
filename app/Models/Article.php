@@ -42,5 +42,10 @@ class Article extends Model
         return $this->hasMany(Commande::class, 'id_article');
     }
 
+    public function paniers(){
+        return $this->hasMany(Panier::class, 'id_article');
+    }
+
+
 
 }

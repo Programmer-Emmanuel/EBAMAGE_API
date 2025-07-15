@@ -5,6 +5,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategorieController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeController;
+use App\Http\Controllers\PanierController;
 use App\Http\Controllers\RechercheController;
 use App\Http\Controllers\VariationController;
 use App\Http\Controllers\VilleCommuneController;
@@ -78,7 +79,7 @@ Route::prefix('/api')->group(function(){
     Route::get('/categories', [CategorieController::class, 'liste_categorie']);
 
     //RECHERCHES ET HISTORIQUES DES RECHERCHES
-    Route::post('/recherche', [RechercheController::class, "recherche"]);
+    Route::get('/recherche', [RechercheController::class, "recherche"]);
     Route::get('/historique', [RechercheController::class, 'historique']);
 
 
@@ -97,6 +98,15 @@ Route::prefix('/api')->group(function(){
 
     Route::middleware('auth:client')->group(function(){
         Route::post('/passer/commande', [CommandeController::class, 'commande_ajout']);
+
+        //PANIER
+
+        //Ajout panier
+        Route::post('/ajout/panier', [PanierController::class, 'ajout_panier']);
+        Route::get('/panier', [PanierController::class, 'get_panier']);
+        Route::post('/panier/augmenter', [PanierController::class, 'augmenterQuantite']);
+        Route::post('/panier/diminuer', [PanierController::class, 'diminuerQuantite']);
+
     });
     Route::get('/commandes', [CommandeController::class, 'liste_commande']);
     Route::get('/commande/{hashid}', [CommandeController::class, 'commande']);

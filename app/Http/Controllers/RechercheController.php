@@ -9,56 +9,50 @@ use Illuminate\Http\Request;
 
 class RechercheController extends Controller
 {
-    public function recherche(Request $request)
-{
-    $request->validate([
-        'lib_recherche' => 'required'
-    ], [
-        'lib_recherche.required' => 'Le champ lib_recherche est requis.'
-    ]);
+    public function recherche(Request $request){
+        $request->validate([
+            'keyword' => 'required|string'
+        ], [
+            'keyword.required' => 'Le champ keyword est requis.'
+        ]);
 
-    try {
-        $lib = $request->lib_recherche;
+        try {
+            $keyword = $request->query('keyword'); // récupère depuis la query string
 
-        // Ajout dans l'historique
-        $historique = new Historique();
-        $historique->lib_recherche = $lib;
-        $historique->save();
+            // Enregistrement dans l'historique (optionnel)
+            $historique = new Historique();
+            $historique->lib_recherche = $keyword;
+            $historique->save();
 
-        $articles = Article::with(['categories', 'variations'])
-            ->where('nom_article', 'like', "%$lib%")
-            ->orWhereHas('categories', function ($query) use ($lib) {
-                $query->where('nom_categorie', 'like', "%$lib%");
-            })
-            ->get();
+            // Recherche articles (nom_article ou catégorie)
+            $articles = Article::with(['categories', 'variations'])
+                ->where('nom_article', 'like', "%$keyword%")
+                ->orWhereHas('categories', function ($query) use ($keyword) {
+                    $query->where('nom_categorie', 'like', "%$keyword%");
+                })
+                ->get();
 
-        if ($articles->isNotEmpty()) {
-            return response()->json([
-                'success' => true,
-                'data' => $articles,
-                'message' => 'Articles récupérés avec succès.'
-            ]);
-        } else {
+            if ($articles->isNotEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'data' => $articles,
+                    'message' => 'Articles récupérés avec succès.'
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Aucun article ne correspond à votre recherche.'
+                ]);
+            }
+        } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Aucun article ne correspond à votre recherche.'
-            ]);
+                'message' => 'Une erreur est survenue.',
+                'erreur' => $e->getMessage()
+            ], 500);
         }
-
-    } catch (QueryException $e) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Erreur lors de la recherche.',
-            'erreur' => $e->getMessage()
-        ], 500);
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Une erreur inattendue est survenue.',
-            'erreur' => $e->getMessage()
-        ], 500);
     }
-}
+
 
 
     public function historique()
