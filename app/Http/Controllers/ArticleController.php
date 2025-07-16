@@ -385,6 +385,50 @@ class ArticleController extends Controller
         }
     }
 
+    public function delete_article(Request $request, $hashid){
+        try {
+            $id = Hashids::decode($hashid)[0] ?? null;
+
+            if (!$id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'ID d\'article invalide.'
+                ], 400);
+            }
+
+            $article = Article::find($id);
+
+            if (!$article) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Article introuvable.'
+                ], 404);
+            }
+
+            // Facultatif : vérification que l'article appartient à la boutique connectée
+            if ($article->id_btq !== auth('boutique')->id()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Non autorisé à supprimer cet article.'
+                ], 403);
+            }
+
+            $article->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Article supprimé avec succès.'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Une erreur est survenue.',
+                'erreur' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
 
 
     public function trier_par_prix_moinsCher_cher()
