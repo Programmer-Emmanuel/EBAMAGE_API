@@ -235,67 +235,174 @@ class PanierController extends Controller
         }
     }
 
+    private function getPanierResponse($clientId, $message){
+        $paniers = Panier::with('article')->where('id_clt', $clientId)->get();
+
+        $items = $paniers->map(function ($item) {
+            $article = $item->article;
+
+            $image = 'image_par_defaut.jpg';
+            $imagesArray = [];
+
+            // Traitement des images JSON ou simple string
+            if (!empty($article->images)) {
+                $decoded = json_decode($article->images, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    $imagesArray = $decoded;
+                }
+            }
+
+            if (count($imagesArray) > 0) {
+                $image = $imagesArray[0]; // Première image
+            } elseif (!empty($article->image)) {
+                $image = $article->image;
+            }
+
+            $prixUnitaire = $article->prix ?? 0;
+
+            return [
+                'nom_article' => $article->nom_article ?? 'Nom indisponible',
+                'quantite' => $item->quantite,
+                'prix_unitaire' => $prixUnitaire,
+                'image' => $image,
+                'variations' => $item->variations ?? [],
+                'prix_avec_quantite' => $prixUnitaire * $item->quantite,
+            ];
+        });
+
+        $prix_total = $items->sum('prix_avec_quantite');
+
+        return response()->json([
+            'success' => true,
+            'cart' => $items,
+            'prix_total' => $prix_total,
+            'message' => $message
+        ]);
+    }
+
+
    public function augmenterQuantite(Request $request){
-        $request->validate([
-            'id_article' => 'required|string'
-        ]);
-
-        $id = Hashids::decode($request->id_article)[0] ?? null;
-
-        if (!$id) {
-            return response()->json(['success' => false, 'message' => 'ID panier invalide.'], 400);
-        }
-
-        $panier = Panier::find($id);
-
-        if (!$panier) {
-            return response()->json(['success' => false, 'message' => 'Article panier non trouvé.'], 404);
-        }
-
-        if ($panier->quantite >= 10) {
-            return response()->json(['success' => false, 'message' => 'Quantité maximale atteinte.'], 400);
-        }
-
-        $panier->quantite += 1;
-        $panier->prix_total = $panier->article->prix * $panier->quantite;
-        $panier->save();
-
-        return response()->json(['success' => true, 'message' => 'Quantité augmentée.', 'quantite' => $panier->quantite]);
-    }
-
-    public function diminuerQuantite(Request $request)
-    {
-        $request->validate([
-            'id_article' => 'required|string'
-        ]);
-
-        $id = Hashids::decode($request->id_article)[0] ?? null;
-
-        if (!$id) {
-            return response()->json(['success' => false, 'message' => 'ID panier invalide.'], 400);
-        }
-
-        $panier = Panier::find($id);
-
-        if (!$panier) {
-            return response()->json(['success' => false, 'message' => 'Article panier non trouvé.'], 404);
-        }
-
-        if ($panier->quantite <= 1) {
-            $panier->delete();
-
-            return response()->json([
-                'success' => true,
-                'message' => "Article supprimé du panier car la quantité est devenue minimale.",
+        try {
+            $request->validate([
+                'id_article' => 'required|string'
             ]);
+
+            $user = $request->user();
+            $id = Hashids::decode($request->id_article)[0] ?? null;
+
+            if (!$id) {
+                return response()->json(['success' => false, 'message' => 'ID article invalide.'], 400);
+            }
+
+            // Chercher la première occurrence de cet article dans le panier du user
+            $panier = Panier::where('id_clt', $user->id)
+                ->where('id_article', $id)
+                ->with('article')
+                ->first();
+
+            if (!$panier) {
+                return response()->json(['success' => false, 'message' => 'Article panier non trouvé.'], 404);
+            }
+
+            if ($panier->quantite >= 10) {
+                return response()->json(['success' => false, 'message' => 'Quantité maximale atteinte.'], 400);
+            }
+
+            $prixUnitaire = $panier->article->prix ?? 0;
+            $panier->quantite += 1;
+            $panier->prix_total = $prixUnitaire * $panier->quantite;
+            $panier->save();
+
+            return $this->getPanierResponse($user->id, 'Quantité augmentée.');
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur : ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+    public function diminuerQuantite(Request $request){
+        try {
+            $request->validate([
+                'id_article' => 'required|string'
+            ]);
+
+            $user = $request->user();
+            $id = Hashids::decode($request->id_article)[0] ?? null;
+
+            if (!$id) {
+                return response()->json(['success' => false, 'message' => 'ID article invalide.'], 400);
+            }
+
+            $panier = Panier::where('id_clt', $user->id)
+                ->where('id_article', $id)
+                ->with('article')
+                ->first();
+
+            if (!$panier) {
+                return response()->json(['success' => false, 'message' => 'Article panier non trouvé.'], 404);
+            }
+
+            if ($panier->quantite <= 1) {
+                $panier->delete();
+                return $this->getPanierResponse($user->id, 'Article supprimé du panier.');
+            }
+
+            $prixUnitaire = $panier->article->prix ?? 0;
+            $panier->quantite -= 1;
+            $panier->prix_total = $prixUnitaire * $panier->quantite;
+            $panier->save();
+
+            return $this->getPanierResponse($user->id, 'Quantité diminuée.');
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur : ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function supprimerArticle(Request $request, $hashid){
+    try {
+        $user = $request->user();
+        $decodedId = Hashids::decode($hashid)[0] ?? null;
+
+        if (!$decodedId) {
+            return response()->json([
+                'success' => false,
+                'message' => 'ID invalide.',
+            ], 400);
         }
 
+        $panier = Panier::where('id', $decodedId)
+            ->where('id_clt', $user->id)
+            ->first();
 
-        $panier->quantite -= 1;
-        $panier->prix_total = $panier->article->prix * $panier->quantite;
-        $panier->save();
+        if (!$panier) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Article non trouvé dans le panier.',
+            ], 404);
+        }
 
-        return response()->json(['success' => true, 'message' => 'Quantité diminuée.', 'quantite' => $panier->quantite]);
+        $panier->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Article supprimé du panier avec succès.',
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur est survenue : ' . $e->getMessage(),
+        ], 500);
     }
+}
+
+
 
 }
