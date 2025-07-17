@@ -366,42 +366,54 @@ class PanierController extends Controller
         }
     }
 
-    public function supprimerArticle(Request $request, $hashid){
+    public function supprimerArticle(Request $request)
+{
     try {
         $user = $request->user();
+        $hashid = $request->input('id_article');
         $decodedId = Hashids::decode($hashid)[0] ?? null;
 
         if (!$decodedId) {
             return response()->json([
                 'success' => false,
+                'cart' => null,
+                'id_panier' => null,
+                'prix_total' => 0,
                 'message' => 'ID invalide.',
             ], 400);
         }
 
-        $panier = Panier::where('id', $decodedId)
+        $panier = Panier::where('id_article', $decodedId)
             ->where('id_clt', $user->id)
             ->first();
 
         if (!$panier) {
             return response()->json([
                 'success' => false,
+                'cart' => null,
+                'id_panier' => null,
+                'prix_total' => 0,
                 'message' => 'Article non trouvé dans le panier.',
             ], 404);
         }
 
         $panier->delete();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Article supprimé du panier avec succès.',
-        ]);
+        // Tu peux appeler ici get_panier() ou recalculer manuellement
+        return $this->get_panier($request);
+
     } catch (\Exception $e) {
         return response()->json([
             'success' => false,
+            'cart' => null,
+            'id_panier' => null,
+            'prix_total' => 0,
             'message' => 'Une erreur est survenue : ' . $e->getMessage(),
         ], 500);
     }
 }
+
+
 
 
 

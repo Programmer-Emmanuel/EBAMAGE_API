@@ -106,7 +106,7 @@ Route::prefix('/api')->group(function(){
         Route::get('/panier', [PanierController::class, 'get_panier']);
         Route::post('/panier/augmenter', [PanierController::class, 'augmenterQuantite']);
         Route::post('/panier/diminuer', [PanierController::class, 'diminuerQuantite']);
-        Route::post('/panier/{hashid}/delete', [PanierController::class, 'supprimerArticle']);
+        Route::post('/panier/delete', [PanierController::class, 'supprimerArticle']);
 
     });
     Route::get('/commandes', [CommandeController::class, 'liste_commande']);
