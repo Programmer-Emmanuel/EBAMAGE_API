@@ -13,11 +13,11 @@ return new class extends Migration
     {
         Schema::create('paniers', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('id_clt');
-            $table->unsignedBigInteger('id_article');
-            $table->integer('quantite');
-            $table->integer('prix_total');
-            $table->json('variations');
+            $table->unsignedBigInteger('id_clt')->nullable();
+            $table->unsignedBigInteger('id_article')->nullable();
+            $table->integer('quantite')->nullable();
+            $table->integer('prix_total')->nullable();
+            $table->json('variations')->nullable();
             $table->timestamps();
 
 

@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('nom_variation');
             $table->json('lib_variation');
 
-            $table->unsignedBigInteger('id_btq');
+            $table->unsignedBigInteger('id_btq')->nullable();
 
             $table->foreign('id_btq')
                 ->references('id')

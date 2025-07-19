@@ -38,4 +38,16 @@ class Panier extends Model
     {
         return $this->belongsTo(Article::class, 'id_article');
     }
+
+        public function boutique()
+        {
+            return $this->belongsTo(Boutique::class, 'id_btq', 'id');
+        }
+
+        public function commandes()
+        {
+            return $this->hasMany(Commande::class, 'id_panier');
+        }
+
+
 }

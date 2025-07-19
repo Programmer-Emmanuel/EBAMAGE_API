@@ -50,13 +50,17 @@ Route::prefix('/api')->group(function(){
         Route::post('/article/{hashid}/update', [ArticleController::class, 'update_article']);
         Route::post('/article/{hashid}/delete', [ArticleController::class, 'delete_article']);
 
-        //CRUD VARIATION
-        Route::post('/variation/ajout', [VariationController::class, 'ajout_variation']);
-        Route::get('/variation/{hashid}', [VariationController::class, 'variation']);
-        Route::post('/variation/{hashid}/update', [VariationController::class, 'update_variation']);
-        Route::post('/variation/{hashid}/delete', [VariationController::class, 'delete_variation']);
-
+        //gestion des commandes de la boutique
+        Route::get('/commande/boutique', [CommandeController::class, 'commandes_boutique']);
+        Route::post('/commande/{hashid}/reception', [CommandeController::class, 'edit_statut_reception']);
+        Route::post('/commande/{hashid}/annule', [CommandeController::class, 'edit_statut_annule']);
     });
+
+    //CRUD VARIATION
+    Route::post('/variation/ajout', [VariationController::class, 'ajout_variation']);
+    Route::get('/variation/{hashid}', [VariationController::class, 'variation']);
+    Route::post('/variation/{hashid}/update', [VariationController::class, 'update_variation']);
+    Route::post('/variation/{hashid}/delete', [VariationController::class, 'delete_variation']);
 
     //Route qui ne nécéssite pas que la boutique soit connectée
     Route::get('/articles', [ArticleController::class, 'liste_article']);
@@ -98,6 +102,7 @@ Route::prefix('/api')->group(function(){
 
     Route::middleware('auth:client')->group(function(){
         Route::post('/passer/commande', [CommandeController::class, 'commande_ajout']);
+        Route::get('/commande/client', [CommandeController::class, 'commandes_client']);
 
         //PANIER
 
@@ -113,9 +118,7 @@ Route::prefix('/api')->group(function(){
     Route::get('/commande/{hashid}', [CommandeController::class, 'commande']);
 
     //Changer le statut des commandes
-    Route::post('/commande/{hashid}/reception', [CommandeController::class, 'edit_statut_reception']);
     Route::post('/commande/{hashid}/confirme', [CommandeController::class, 'edit_statut_confirme']);
-    Route::post('/commande/{hashid}/annule', [CommandeController::class, 'edit_statut_annule']);
 
     //Liste des tendances
     Route::get('/articles/tendances', [CommandeController::class, 'articles_tendance']);

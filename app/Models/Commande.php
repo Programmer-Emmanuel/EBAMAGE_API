@@ -8,24 +8,42 @@ use Vinkla\Hashids\Facades\Hashids;
 
 class Commande extends Model
 {
-    // Si tu veux autoriser le remplissage en masse
-    protected $fillable = [
-        'id_clt',
-        'id_btq',
-        'id_article',
-        'id_commune',
-        'statut',
-        'quartier',
-    ];
+protected $fillable = [
+    'id_clt',
+    'id_btq',
+    'id_panier', // à garder si tu l'utilises
+    'id_ville',
+    'id_commune',          // important si tu l'as dans ta table
+    'articles',            // <-- nouveau champ JSON qui stocke tous les articles + variations
+    'quantite',
+    'prix',
+    'livraison',
+    'prix_total',
+    'statut',
+    'quartier',
+    'moyen_de_paiement', 
+];
 
-    protected $hidden = [
-        'id'
-    ];
+protected $casts = [
+    'articles' => 'array',
+];
 
-     public function getHashidAttribute(){
+
+
+    protected $hidden = ['id'];
+
+    protected $appends = ['hashid', 'moyen_de_paiement_libelle'];
+
+    public function getHashidAttribute()
+    {
         return Hashids::encode($this->id);
     }
-    protected $appends = ['hashid'];
+
+    // Accessor pour le libellé du moyen de paiement
+    public function getMoyenDePaiementLibelleAttribute()
+    {
+        return $this->moyen_de_paiement == 1 ? "à la livraison" : "TDLPay";
+    }
 
     // Relations
     public function client(): BelongsTo
@@ -38,13 +56,22 @@ class Commande extends Model
         return $this->belongsTo(Boutique::class, 'id_btq');
     }
 
-    public function article(): BelongsTo
+    public function panier(): BelongsTo
     {
-        return $this->belongsTo(Article::class, 'id_article');
+        return $this->belongsTo(Panier::class, 'id_panier');
     }
 
-    public function commune(): BelongsTo
+    public function ville(): BelongsTo
     {
-        return $this->belongsTo(Commune::class, 'id_commune');
+        return $this->belongsTo(Ville::class, 'id_ville');
     }
+
+    public function commune()
+{
+    return $this->belongsTo(Commune::class, 'id_commune');
+}
+
+
+
+
 }
