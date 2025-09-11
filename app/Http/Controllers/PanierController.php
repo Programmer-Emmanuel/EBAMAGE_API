@@ -31,52 +31,73 @@ public function ajout_panier(Request $request)
             ], 400);
         }
 
-        $article = Article::findOrFail($idDecoded);
+        $article = Article::with('variations')->findOrFail($idDecoded);
 
-        $submittedVariations = collect($request->variations ?? [])
-            ->map(fn($v) => [
-                'nom_variation' => strtolower(trim($v['nom_variation'])),
-                'lib_variation' => strtolower(trim($v['lib_variation'])),
-            ])
-            ->sortBy('nom_variation')
-            ->values()
-            ->toArray();
+        // Fonction pour normaliser les noms
+        $normalize = function ($str) {
+            return preg_replace('/[^a-z]/', '', strtolower($str));
+        };
 
-        if (!empty($submittedVariations)) {
-            $articleVariations = collect($article->variations)->flatMap(function ($v) {
-                $nomVar = strtolower(trim($v['nom_variation'] ?? $v['no_variation'] ?? ''));
-                $libVars = is_array($v['lib_variation']) ? $v['lib_variation'] : [$v['lib_variation']];
-                return collect($libVars)->map(fn($lib) => [
-                    'nom_variation' => $nomVar,
-                    'lib_variation' => strtolower(trim($lib)),
-                ]);
-            });
+        // Soumissions du frontend normalisées
+        $submittedVariationsRaw = $request->variations ?? [];
+        $submittedVariations = [];
+        $variationCount = [];
 
-            foreach ($submittedVariations as $var) {
-                if (!$articleVariations->contains($var)) {
-                    return response()->json([
-                        'success' => false,
-                        'cart' => null,
-                        'message' => "La variation '{$var['nom_variation']}: {$var['lib_variation']}' n'appartient pas à cet article."
-                    ], 422);
-                }
+        foreach ($submittedVariationsRaw as $v) {
+            $nom = $normalize($v['nom_variation']);
+            $lib = strtolower(trim($v['lib_variation']));
+
+            // Compter les répétitions d'un même nom normalisé
+            $variationCount[$nom] = ($variationCount[$nom] ?? 0) + 1;
+            $suffix = $variationCount[$nom] > 1 ? ' ' . $variationCount[$nom] : '';
+
+            $submittedVariations[] = [
+                'nom_variation' => $nom,
+                'lib_variation' => $lib,
+                'suffix' => $suffix, // utile uniquement pour la réponse finale
+            ];
+        }
+
+        // Variations de l’article à comparer
+        $articleVariations = collect($article->variations)->flatMap(function ($v) use ($normalize) {
+            $nom = $normalize($v['nom_variation'] ?? '');
+            $libList = is_array($v['lib_variation']) ? $v['lib_variation'] : [$v['lib_variation']];
+            return collect($libList)->map(fn($lib) => [
+                'nom_variation' => $nom,
+                'lib_variation' => strtolower(trim($lib))
+            ]);
+        });
+
+        foreach ($submittedVariations as $var) {
+            if (!$articleVariations->contains([
+                'nom_variation' => $var['nom_variation'],
+                'lib_variation' => $var['lib_variation'],
+            ])) {
+                $nomErreur = $var['nom_variation'] . $var['suffix'];
+                return response()->json([
+                    'success' => false,
+                    'cart' => null,
+                    'message' => "La variation '{$nomErreur}: {$var['lib_variation']}' n'appartient pas à cet article."
+                ], 422);
             }
         }
+
+        // Comparaison avec paniers existants
+        $submittedSimple = collect($submittedVariations)->map(fn($v) => [
+            'nom_variation' => $v['nom_variation'],
+            'lib_variation' => $v['lib_variation']
+        ])->sortBy('nom_variation')->values()->toArray();
 
         $panierExistant = Panier::where('id_clt', $user->id)
             ->where('id_article', $article->id)
             ->get()
-            ->first(function ($item) use ($submittedVariations) {
-                $existing = collect($item->variations ?? [])
-                    ->map(fn($v) => [
-                        'nom_variation' => strtolower(trim($v['nom_variation'])),
-                        'lib_variation' => strtolower(trim($v['lib_variation'])),
-                    ])
-                    ->sortBy('nom_variation')
-                    ->values()
-                    ->toArray();
+            ->first(function ($item) use ($submittedSimple, $normalize) {
+                $existing = collect($item->variations ?? [])->map(fn($v) => [
+                    'nom_variation' => $normalize($v['nom_variation']),
+                    'lib_variation' => strtolower(trim($v['lib_variation']))
+                ])->sortBy('nom_variation')->values()->toArray();
 
-                return $existing === $submittedVariations;
+                return $existing === $submittedSimple;
             });
 
         if ($panierExistant) {
@@ -93,49 +114,55 @@ public function ajout_panier(Request $request)
             $panierExistant->save();
             $panier = $panierExistant;
         } else {
-            $panier = new Panier([
+            $panier = Panier::create([
                 'id_clt' => $user->id,
                 'id_article' => $article->id,
-                'variations' => $submittedVariations,
+                'variations' => $submittedSimple,
                 'quantite' => 1,
                 'prix_total' => $article->prix,
             ]);
-            $panier->save();
         }
 
-        // Recharger le panier
+        // Récupération du panier complet
         $paniers = Panier::where('id_clt', $user->id)->with('article')->get();
 
-        $items = $paniers->map(function ($item) {
+        $items = $paniers->map(function ($item) use ($normalize) {
             $article = $item->article;
-
             $image = 'image_par_defaut.jpg';
-            $imagesArray = [];
 
             if (!empty($article->images)) {
                 $decoded = json_decode($article->images, true);
-                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                    $imagesArray = $decoded;
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded) && count($decoded) > 0) {
+                    $image = $decoded[0];
                 }
-            }
-
-            if (count($imagesArray) > 0) {
-                $image = $imagesArray[0];
-            } elseif (!empty($article->image) && is_string($article->image)) {
+            } elseif (!empty($article->image)) {
                 $image = $article->image;
             }
 
-            $prixUnitaire = $article->prix ?? 0;
+            // Ajouter suffixes pour différencier les noms identiques
+            $variations = $item->variations ?? [];
+            $countNom = [];
+            $variationsLabel = [];
+
+            foreach ($variations as $v) {
+                $nom = $normalize($v['nom_variation']);
+                $countNom[$nom] = ($countNom[$nom] ?? 0) + 1;
+                $suffix = $countNom[$nom] > 1 ? ' ' . $countNom[$nom] : '';
+                $variationsLabel[] = [
+                    'nom_variation' => $nom . $suffix,
+                    'lib_variation' => $v['lib_variation']
+                ];
+            }
 
             return [
-                'hashid_panier_item' => Hashids::encode($item->id), // ← identifiant unique de la ligne du panier
+                'hashid_panier_item' => Hashids::encode($item->id),
                 'hashid' => Hashids::encode($article->id),
                 'nom_article' => $article->nom_article ?? 'Nom indisponible',
                 'quantite' => $item->quantite,
-                'prix_unitaire' => $prixUnitaire,
+                'prix_unitaire' => $article->prix ?? 0,
                 'image' => $image,
-                'variations' => $item->variations ?? [],
-                'prix_avec_quantite' => $item->quantite * $prixUnitaire,
+                'variations' => $variationsLabel,
+                'prix_avec_quantite' => $item->quantite * ($article->prix ?? 0),
             ];
         });
 
@@ -144,7 +171,7 @@ public function ajout_panier(Request $request)
         return response()->json([
             'success' => true,
             'cart' => $items,
-            'id_panier' => $paniers->isNotEmpty() ? Hashids::encode($paniers->first()->id_clt) : null,
+            'id_panier' => $paniers->isNotEmpty() ? Hashids::encode($user->id) : null,
             'prix_total' => $prix_total_panier,
             'message' => 'Article ajouté au panier avec succès.'
         ]);
@@ -168,9 +195,15 @@ public function ajout_panier(Request $request)
 
 
 
+
+
     public function get_panier(Request $request)
 {
     try {
+        $normalize = function ($str) {
+            return preg_replace('/[^a-z]/', '', strtolower($str));
+        };
+
         $user = $request->user();
 
         $paniers = Panier::where('id_clt', $user->id)->with('article')->get();
@@ -185,7 +218,7 @@ public function ajout_panier(Request $request)
             ]);
         }
 
-        $items = $paniers->map(function ($item) {
+        $items = $paniers->map(function ($item) use ($normalize) {
             $article = $item->article;
 
             $image = 'image_par_defaut.jpg';
@@ -204,16 +237,31 @@ public function ajout_panier(Request $request)
                 $image = $article->image;
             }
 
+            // Ajout suffixes pour différencier les noms identiques
+            $variations = $item->variations ?? [];
+            $countNom = [];
+            $variationsLabel = [];
+
+            foreach ($variations as $v) {
+                $nom = $normalize($v['nom_variation']);
+                $countNom[$nom] = ($countNom[$nom] ?? 0) + 1;
+                $suffix = $countNom[$nom] > 1 ? ' ' . $countNom[$nom] : '';
+                $variationsLabel[] = [
+                    'nom_variation' => $nom . $suffix,
+                    'lib_variation' => $v['lib_variation']
+                ];
+            }
+
             $prixUnitaire = $article->prix ?? 0;
 
             return [
-                'hashid_panier_item' => Hashids::encode($item->id), // ← ID unique de la ligne du panier
+                'hashid_panier_item' => Hashids::encode($item->id),
                 'hashid' => Hashids::encode($article->id),
                 'nom_article' => $article->nom_article ?? 'Nom indisponible',
                 'quantite' => $item->quantite,
                 'prix_unitaire' => $prixUnitaire,
                 'image' => $image,
-                'variations' => $item->variations ?? [],
+                'variations' => $variationsLabel,
                 'prix_avec_quantite' => $item->quantite * $prixUnitaire,
             ];
         });
@@ -237,6 +285,7 @@ public function ajout_panier(Request $request)
         ], 500);
     }
 }
+
 
 
     private function getPanierResponse($clientId, $message){

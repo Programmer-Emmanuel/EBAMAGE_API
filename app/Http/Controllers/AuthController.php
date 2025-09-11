@@ -168,12 +168,8 @@ class AuthController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Code OTP vérifié avec succès.',
-            'data' => [
-                    'nom_clt' => $client->nom_clt,
-                    'email_clt' => $client->email_clt,
-                    'tel_clt' => $client->tel_clt,
-                'token' => $token,
-            ]
+            'data' => $client,
+            'token' => $token,
         ]);
 
     } catch (QueryException $e) {

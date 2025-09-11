@@ -26,19 +26,34 @@ public function commande_ajout(Request $request)
         }
 
         $id_panier = Hashids::decode($request->id_panier)[0] ?? null;
-        $id_ville = Hashids::decode($request->id_ville)[0] ?? null;
-        $id_commune = Hashids::decode($request->id_commune)[0] ?? null;
+
+        // On récupère lib_ville et lib_commune du front
+        $lib_ville = $request->input('lib_ville');
+        $lib_commune = $request->input('lib_commune');
         $quartier = $request->quartier;
         $moyen_de_paiement = $request->input('moyen_de_paiement', 1);
 
-        if (!$id_panier || !$id_ville || !$quartier || !$id_commune) {
+        if (!$id_panier || !$lib_ville || !$lib_commune || !$quartier) {
             return response()->json(['success' => false, 'message' => 'Paramètres manquants ou invalides.'], 400);
         }
 
+        // Recherche des IDs correspondants
+        $ville = Ville::where('lib_ville', $lib_ville)->first();
+        $commune = Commune::where('lib_commune', $lib_commune)->where('id_ville', $ville ? $ville->id : 0)->first();
+
+        if (!$ville) {
+            return response()->json(['success' => false, 'message' => "Ville '{$lib_ville}' non trouvée."], 404);
+        }
+
+        if (!$commune) {
+            return response()->json(['success' => false, 'message' => "Commune '{$lib_commune}' non trouvée pour la ville '{$lib_ville}'."], 404);
+        }
+
+        // Remplacer lib_ville/lib_commune par leurs IDs dans la requête
         $request->merge([
             'id_panier' => $id_panier,
-            'id_ville' => $id_ville,
-            'id_commune' => $id_commune,
+            'id_ville' => $ville->id,
+            'id_commune' => $commune->id,
             'quartier' => $quartier,
             'moyen_de_paiement' => $moyen_de_paiement,
         ]);
@@ -120,8 +135,8 @@ public function commande_ajout(Request $request)
         $commande = new Commande();
         $commande->id_clt = $user->id;
         $commande->id_btq = $id_btq;
-        $commande->id_ville = $id_ville;
-        $commande->id_commune = $id_commune;
+        $commande->id_ville = $ville->id;
+        $commande->id_commune = $commune->id;
         $commande->articles = json_encode($articlesArray);
         $commande->quantite = $paniers->sum('quantite');
         $commande->prix = $prix_total_articles;
@@ -143,8 +158,8 @@ public function commande_ajout(Request $request)
                 'hashid_clt' => Hashids::encode($user->id),
             ],
             'localisation' => [
-                'commune' => Commune::find($id_commune)->lib_commune ?? null,
-                'ville' => Ville::find($id_ville)->lib_ville ?? null,
+                'commune' => $commune->lib_commune,
+                'ville' => $ville->lib_ville,
                 'quartier' => $quartier,
             ],
             'prix_total_articles' => $prix_total_articles,
@@ -170,6 +185,7 @@ public function commande_ajout(Request $request)
         ], 500);
     }
 }
+
 
 
 
@@ -318,8 +334,7 @@ public function commandes_client(Request $request)
             ], 401);
         }
 
-        $commandes = Commande::with(['client', 'boutique', 'ville', 'commune'])
-            ->where('id_clt', $client->id)
+        $commandes = Commande::where('id_clt', $client->id)
             ->latest()
             ->get();
 
@@ -328,35 +343,10 @@ public function commandes_client(Request $request)
 
             return [
                 'hashid' => Hashids::encode($commande->id),
-                'client' => [
-                    'nom_clt' => $commande->client->nom_clt,
-                    'hashid_clt' => Hashids::encode($commande->client->id),
-                ],
-                'localisation' => [
-                    'commune' => $commande->commune->lib_commune ?? null,
-                    'ville' => $commande->ville->lib_ville ?? null,
-                    'quartier' => $commande->quartier,
-                ],
-                'prix_total_articles' => $commande->prix,
-                'livraison' => $commande->livraison,
-                'prix_total_commande' => $commande->prix_total,
-                'articles' => collect($articles)->map(function ($article) {
-                    return [
-                        'hashid' => $article['hashid'] ?? null,
-                        'id_article' => $article['id_article'] ?? null,
-                        'nom_article' => $article['nom_article'] ?? null,
-                        'prix' => $article['prix'] ?? null,
-                        'quantite' => $article['quantite'] ?? null,
-                        'image' => $article['image'] ?? null,
-                        'description' => $article['description'] ?? null,
-                        'variations' => $article['variations'] ?? [],
-                        'boutique' => $article['boutique'] ?? null,
-                    ];
-                })->values(),
-                'statut' => $commande->statut,
-                'moyen_de_paiement' => $commande->moyen_de_paiement == 1 ? 'à la livraison' : 'en ligne',
-                'created_at' => $commande->created_at->toDateTimeString(),
-                'updated_at' => $commande->updated_at->toDateTimeString(),
+                'created_at' => $commande->created_at->setTimezone('UTC')->format('Y-m-d\TH:i:s\Z'),
+                'nombre_articles' => collect($articles)->sum(function ($article) {
+                    return $article['quantite'] ?? 0;
+                }),
             ];
         });
 
@@ -373,6 +363,7 @@ public function commandes_client(Request $request)
         ], 500);
     }
 }
+
 
 
 public function commandes_boutique(Request $request)
@@ -541,34 +532,60 @@ private function updateStatut($hashid, $statut)
 }
 
 
-    public function articles_tendance()
+public function articles_tendance()
 {
     try {
-        $articles = Article::select(
-                'articles.id',
-                'articles.nom_article',
-                'articles.prix',
-                'articles.old_price',
-                'articles.description',
-                'articles.images',
-                DB::raw('SUM(commandes.quantite) as total_commandes')
-            )
-            ->join('commandes', 'commandes.id_article', '=', 'articles.id')
-            ->groupBy(
-                'articles.id',
-                'articles.nom_article',
-                'articles.prix',
-                'articles.old_price',
-                'articles.description',
-                'articles.images'
-            )
-            ->orderByDesc('total_commandes')
-            ->limit(10)
-            ->get();
+        $commandes = \App\Models\Commande::all();
 
-        // Si moins de 3 articles ont été commandés, on bascule sur les recommandations
-        if ($articles->count() < 3) {
-            $recommended = Article::inRandomOrder()
+        $articlesMap = [];
+
+        foreach ($commandes as $commande) {
+            $articles = json_decode($commande->articles, true) ?? [];
+
+            foreach ($articles as $article) {
+                $id = $article['hashid'] ?? null;
+                $quantite = $article['quantite'] ?? 0;
+
+                if (!$id) continue;
+
+                if (!isset($articlesMap[$id])) {
+                    $articlesMap[$id] = [
+                        'hashid' => $id,
+                        'quantite' => 0,
+                    ];
+                }
+
+                $articlesMap[$id]['quantite'] += $quantite;
+            }
+        }
+
+        // Trier les articles par quantité décroissante
+        $sorted = collect($articlesMap)->sortByDesc('quantite')->take(10);
+
+        // Récupérer les détails des articles
+        $result = $sorted->map(function ($item) {
+            $id_article = Hashids::decode($item['hashid'])[0] ?? null;
+            if (!$id_article) return null;
+
+            $article = \App\Models\Article::find($id_article);
+            if (!$article) return null;
+
+            $images = json_decode($article->images, true);
+
+            return [
+                'nom_article' => $article->nom_article,
+                'prix' => $article->prix,
+                'old_price' => $article->old_price,
+                'description' => $article->description,
+                'image' => is_array($images) ? $images[0] ?? null : null,
+                'hashid' => Hashids::encode($article->id),
+                'total_commandes' => $item['quantite'],
+            ];
+        })->filter()->values();
+
+        // Si moins de 3 articles commandés, basculer sur recommandations
+        if ($result->count() < 3) {
+            $recommended = \App\Models\Article::inRandomOrder()
                 ->limit(10)
                 ->get(['id', 'nom_article', 'prix', 'old_price', 'description', 'images']);
 
@@ -591,24 +608,10 @@ private function updateStatut($hashid, $statut)
             ]);
         }
 
-        // Sinon on retourne les tendances normales
-        $formatted = $articles->map(function ($article) {
-            $images = json_decode($article->images, true);
-            return [
-                'nom_article' => $article->nom_article,
-                'prix' => $article->prix,
-                'old_price' => $article->old_price,
-                'description' => $article->description,
-                'image' => is_array($images) ? $images[0] ?? null : null,
-                'hashid' => Hashids::encode($article->id),
-                'total_commandes' => $article->total_commandes,
-            ];
-        });
-
         return response()->json([
             'success' => true,
             'message' => 'Top 10 des articles les plus commandés.',
-            'data' => $formatted,
+            'data' => $result,
         ]);
     } catch (\Exception $e) {
         return response()->json([
@@ -618,6 +621,7 @@ private function updateStatut($hashid, $statut)
         ], 500);
     }
 }
+
 
 
 

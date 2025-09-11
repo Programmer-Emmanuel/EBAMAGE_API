@@ -97,7 +97,8 @@ Route::prefix('/api')->group(function(){
     //Communes
     Route::post('/ajout/commune', [VilleCommuneController::class, 'ajout_commune']);
     Route::get('/communes', [VilleCommuneController::class, 'liste_commune']);
-    Route::get('/commune/{hashid}/ville', [VilleCommuneController::class, 'communesParVille']);
+    Route::get('/commune/{lib_ville}/ville', [VilleCommuneController::class, 'communesParVille']);
+
 
 
     Route::middleware('auth:client')->group(function(){

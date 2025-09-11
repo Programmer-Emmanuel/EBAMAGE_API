@@ -30,10 +30,10 @@ public function ajout_article(Request $request)
         'variations.*.lib_variation' => 'required|array|min:1',
     ]);
 
-    if ($request->filled('old_price') && $request->old_price >= $request->prix) {
+    if ($request->filled('old_price') && $request->old_price <= $request->prix) {
         return response()->json([
             'success' => false,
-            'message' => 'Le prix promotionnel (old_price) doit être inférieur au prix normal.',
+            'message' => 'Le prix promotionnel (old_price) doit être supérieur au prix normal.',
         ], 422);
     }
 

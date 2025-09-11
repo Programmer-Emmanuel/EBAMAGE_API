@@ -13,7 +13,7 @@ class VariationController extends Controller
     public function ajout_variation(Request $request){
         try {
             $validated = $request->validate([
-                'nom_variation' => 'required|string|in:taille,color,matiere,longueur',
+                'nom_variation' => 'required|string|in:taille,couleur,matiere,longueur',
             ], [
                 'nom_variation.required' => 'Le nom de la variation est obligatoire.',
                 'nom_variation.in' => 'Le nom de la variation doit être "taille", "color", "matiere" ou "longueur".',

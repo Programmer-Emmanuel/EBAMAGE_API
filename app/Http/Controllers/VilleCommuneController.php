@@ -191,34 +191,34 @@ class VilleCommuneController extends Controller
         }
     }
 
-    public function communesParVille($hashid){
-        $id = Hashids::decode($hashid)[0] ?? null;
+public function communesParVille($lib_ville)
+{
+    // Recherche ville par nom exact (insensible à la casse ? selon besoin)
+    $ville = Ville::where('lib_ville', $lib_ville)->first();
 
-        if (!$id) {
-            return response()->json(['message' => 'ID invalide'], 400);
-        }
-
-        // Récupérer les communes correspondant à la ville
-        $communes = Commune::where('id_ville', $id)->get();
-
-        if ($communes->isEmpty()) {
-            return response()->json(['message' => 'Aucune commune trouvée pour cette ville'], 404);
-        }
-
-        $ville = Ville::where('id', $id)->first();
-        if (!$ville) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Ville non trouvée',
-            ], 404);
-        }
+    if (!$ville) {
         return response()->json([
-            'success' => true,
-            'ville' => $ville->lib_ville,
-            'hashid' => $hashid,
-            'data' => $communes
-        ]);
+            'success' => false,
+            'message' => "Ville '{$lib_ville}' non trouvée",
+        ], 404);
     }
+
+    // Récupérer les communes de cette ville
+    $communes = Commune::where('id_ville', $ville->id)->get();
+
+    if ($communes->isEmpty()) {
+        return response()->json([
+            'success' => false,
+            'message' => "Aucune commune trouvée pour la ville '{$lib_ville}'",
+        ], 404);
+    }
+
+    return response()->json([
+        'success' => true,
+        'ville' => $ville->lib_ville,
+        'data' => $communes,
+    ]);
+}
 
 
 }
