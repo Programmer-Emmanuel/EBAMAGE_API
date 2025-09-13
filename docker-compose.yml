@@ -14,16 +14,19 @@ services:
     environment:
       APP_ENV: local
       APP_DEBUG: true
-      APP_KEY: bbase64:X9MtHVFuWJSTHYdzhgfDedN+E6Y1tDZmQNHrz7LbeBQ=  # génère le tien avec `php artisan key:generate --show`
-      
+      APP_KEY: base64:X9MtHVFuWJSTHYdzhgfDedN+E6Y1tDZmQNHrz7LbeBQ= # Génère le tien
       DB_CONNECTION: pgsql
       DB_HOST: db
       DB_PORT: 5432
       DB_DATABASE: laravel
       DB_USERNAME: laravel
       DB_PASSWORD: secret
+      # Si tu utilises MongoDB aussi
+      MONGODB_URI: "mongodb://mongo:27017"
+      MONGODB_DATABASE: laravel_mongo
     depends_on:
       - db
+      # - mongo # Décommente si MongoDB est utilisé
 
   db:
     image: postgres:15
@@ -38,5 +41,20 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  # Décommente ce service si tu veux MongoDB
+  # mongo:
+  #   image: mongo:6
+  #   container_name: laravel-mongo
+  #   restart: unless-stopped
+  #   environment:
+  #     MONGO_INITDB_ROOT_USERNAME: root
+  #     MONGO_INITDB_ROOT_PASSWORD: example
+  #     MONGO_INITDB_DATABASE: laravel_mongo
+  #   ports:
+  #     - "27017:27017"
+  #   volumes:
+  #     - mongodata:/data/db
+
 volumes:
   pgdata:
+  # mongodata: # Décommente si MongoDB est utilisé
