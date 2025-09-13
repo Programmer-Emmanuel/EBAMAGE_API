@@ -22,7 +22,7 @@ services:
       DB_PORT: 5432
       DB_DATABASE: test
       DB_USERNAME: neondb_owner
-      DB_PASSWORD: "endpoint=ep-purple-meadow-ad9un7ky;npg_seO5mofv3LMZ"
+      DB_PASSWORD: npg_seO5mofv3LMZ
       DB_SSLMODE: require
 
     depends_on:
