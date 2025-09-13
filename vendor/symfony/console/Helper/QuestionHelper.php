@@ -55,7 +55,7 @@ class QuestionHelper extends Helper
         }
 
         $inputStream = $input instanceof StreamableInputInterface ? $input->getStream() : null;
-        $inputStream ??= STDIN;
+        $inputStream ??= \STDIN;
 
         try {
             if (!$question->getValidator()) {
@@ -516,10 +516,14 @@ class QuestionHelper extends Helper
         $ret = '';
         $cp = $this->setIOCodepage();
         while (false !== ($char = fgetc($multiLineStreamReader))) {
-            if (\PHP_EOL === "{$ret}{$char}") {
+            if ("\x4" === $char || \PHP_EOL === "{$ret}{$char}") {
                 break;
             }
             $ret .= $char;
+        }
+
+        if (stream_get_meta_data($inputStream)['seekable']) {
+            fseek($inputStream, ftell($multiLineStreamReader));
         }
 
         return $this->resetIOCodepage($cp, $ret);
