@@ -14,47 +14,33 @@ services:
     environment:
       APP_ENV: local
       APP_DEBUG: true
-      APP_KEY: base64:X9MtHVFuWJSTHYdzhgfDedN+E6Y1tDZmQNHrz7LbeBQ= # Génère le tien
+      APP_KEY: base64:X9MtHVFuWJSTHYdzhgfDedN+E6Y1tDZmQNHrz7LbeBQ=
+
+      # Neon PostgreSQL
       DB_CONNECTION: pgsql
-      DB_HOST: db
+      DB_HOST: ep-purple-meadow-ad9un7ky-pooler.c-2.us-east-1.aws.neon.tech
       DB_PORT: 5432
-      DB_DATABASE: laravel
-      DB_USERNAME: laravel
-      DB_PASSWORD: secret
-      # Si tu utilises MongoDB aussi
-      MONGODB_URI: "mongodb://mongo:27017"
-      MONGODB_DATABASE: laravel_mongo
+      DB_DATABASE: test
+      DB_USERNAME: neondb_owner
+      DB_PASSWORD: "endpoint=ep-purple-meadow-ad9un7ky;npg_seO5mofv3LMZ"
+      DB_SSLMODE: require
+
     depends_on:
-      - db
-      # - mongo # Décommente si MongoDB est utilisé
+      - db  # Tu peux supprimer si tu n’utilises plus le conteneur local postgres
 
-  db:
-    image: postgres:15
-    container_name: laravel-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: laravel
-      POSTGRES_USER: laravel
-      POSTGRES_PASSWORD: secret
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
-  # Décommente ce service si tu veux MongoDB
-  # mongo:
-  #   image: mongo:6
-  #   container_name: laravel-mongo
+  # Si tu ne veux plus le Postgres local, tu peux le commenter
+  # db:
+  #   image: postgres:15
+  #   container_name: laravel-postgres
   #   restart: unless-stopped
   #   environment:
-  #     MONGO_INITDB_ROOT_USERNAME: root
-  #     MONGO_INITDB_ROOT_PASSWORD: example
-  #     MONGO_INITDB_DATABASE: laravel_mongo
+  #     POSTGRES_DB: laravel
+  #     POSTGRES_USER: laravel
+  #     POSTGRES_PASSWORD: secret
   #   ports:
-  #     - "27017:27017"
+  #     - "5432:5432"
   #   volumes:
-  #     - mongodata:/data/db
+  #     - pgdata:/var/lib/postgresql/data
 
 volumes:
   pgdata:
-  # mongodata: # Décommente si MongoDB est utilisé
