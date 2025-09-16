@@ -5,42 +5,27 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: laravel-app
-    container_name: laravel-app
-    ports:
-      - "8000:8000"
+    container_name: laravel_app
+    restart: unless-stopped
     volumes:
       - .:/var/www
-    environment:
-      APP_ENV: local
-      APP_DEBUG: true
-      APP_KEY: base64:X9MtHVFuWJSTHYdzhgfDedN+E6Y1tDZmQNHrz7LbeBQ=
+    networks:
+      - laravel
+    env_file:
+      - .env   # Ton .env contient déjà DB_CONNECTION=pgsql etc.
 
-      # Neon PostgreSQL
-      DB_CONNECTION: pgsql
-      DB_HOST: ep-purple-meadow-ad9un7ky-pooler.c-2.us-east-1.aws.neon.tech
-      DB_PORT: 5432
-      DB_DATABASE: test
-      DB_USERNAME: neondb_owner
-      DB_PASSWORD: npg_seO5mofv3LMZ
-      DB_SSLMODE: require
+  nginx:
+    image: nginx:alpine
+    container_name: laravel_nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/var/www
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - laravel
 
-    depends_on:
-      - db  # Tu peux supprimer si tu n’utilises plus le conteneur local postgres
-
-  # Si tu ne veux plus le Postgres local, tu peux le commenter
-  # db:
-  #   image: postgres:15
-  #   container_name: laravel-postgres
-  #   restart: unless-stopped
-  #   environment:
-  #     POSTGRES_DB: laravel
-  #     POSTGRES_USER: laravel
-  #     POSTGRES_PASSWORD: secret
-  #   ports:
-  #     - "5432:5432"
-  #   volumes:
-  #     - pgdata:/var/lib/postgresql/data
-
-volumes:
-  pgdata:
+networks:
+  laravel:
+    driver: bridge

@@ -196,7 +196,8 @@ public function ajout_article(Request $request)
 
         if ($articles->isEmpty()) {
             return response()->json([
-                'success' => false,
+                'success' => true,
+                'data' => [],
                 'message' => 'Aucun article trouvé.'
             ]);
         }
