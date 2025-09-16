@@ -3,7 +3,7 @@
         'name' => 'laravel/laravel',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => '0f8983f70cdb8fd31a23240542e9984bb6877ae4',
+        'reference' => '984f8c1e4f98a66da36a9f8fc629339063c305b8',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -394,12 +394,6 @@
                 0 => 'v12.28.1',
             ),
         ),
-        'jenssegers/mongodb' => array(
-            'dev_requirement' => false,
-            'replaced' => array(
-                0 => '5.5.0',
-            ),
-        ),
         'kodova/hamcrest-php' => array(
             'dev_requirement' => true,
             'replaced' => array(
@@ -418,7 +412,7 @@
         'laravel/laravel' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => '0f8983f70cdb8fd31a23240542e9984bb6877ae4',
+            'reference' => '984f8c1e4f98a66da36a9f8fc629339063c305b8',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
@@ -567,30 +561,6 @@
             'install_path' => __DIR__ . '/../mockery/mockery',
             'aliases' => array(),
             'dev_requirement' => true,
-        ),
-        'mongodb/builder' => array(
-            'dev_requirement' => false,
-            'replaced' => array(
-                0 => '*',
-            ),
-        ),
-        'mongodb/laravel-mongodb' => array(
-            'pretty_version' => '5.5.0',
-            'version' => '5.5.0.0',
-            'reference' => 'c483b99a69ea9916d17719b86e7e5ea2f8b44c8a',
-            'type' => 'library',
-            'install_path' => __DIR__ . '/../mongodb/laravel-mongodb',
-            'aliases' => array(),
-            'dev_requirement' => false,
-        ),
-        'mongodb/mongodb' => array(
-            'pretty_version' => '2.1.1',
-            'version' => '2.1.1.0',
-            'reference' => 'f399d24905dd42f97dfe0af9706129743ef247ac',
-            'type' => 'library',
-            'install_path' => __DIR__ . '/../mongodb/mongodb',
-            'aliases' => array(),
-            'dev_requirement' => false,
         ),
         'monolog/monolog' => array(
             'pretty_version' => '3.9.0',
@@ -743,9 +713,9 @@
             'dev_requirement' => true,
         ),
         'phpunit/phpunit' => array(
-            'pretty_version' => '11.5.38',
-            'version' => '11.5.38.0',
-            'reference' => '5bd0e4f64a2261b7ade7054c51547beaf2d99e43',
+            'pretty_version' => '11.5.39',
+            'version' => '11.5.39.0',
+            'reference' => 'ad5597f79d8489d2870073ac0bc0dd0ad1fa9931',
             'type' => 'library',
             'install_path' => __DIR__ . '/../phpunit/phpunit',
             'aliases' => array(),

@@ -8,12 +8,10 @@
     "require": {
         "php": "^8.2",
         "illuminate/database": "*",
-        "jenssegers/mongodb": "*",
         "laravel/framework": "^12.0",
         "laravel/sanctum": "^4.1",
         "laravel/tinker": "^2.10.1",
         "laravel/ui": "^4.6",
-        "mongodb/laravel-mongodb": "^5.5",
         "vinkla/hashids": "^13.0"
     },
     "require-dev": {
