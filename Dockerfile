@@ -1,6 +1,7 @@
+# Étape 1 : Image PHP 8.3 FPM sur Debian Bullseye (stable)
 FROM php:8.3-fpm-bullseye
 
-# Installer les dépendances système et extensions PHP
+# Installer dépendances système et extensions PHP
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         git \
@@ -29,7 +30,7 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 # Définir le répertoire de travail
 WORKDIR /var/www
 
-# Copier tout le projet
+# Copier le projet Laravel
 COPY . .
 
 # Installer les dépendances Laravel
@@ -38,8 +39,11 @@ RUN composer install --no-dev --optimize-autoloader
 # Donner les permissions correctes à Laravel
 RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
 
-# Exposer le port pour Laravel
+# Exposer le port HTTP
 EXPOSE 8080
 
-# Commande pour lancer Laravel
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8080"]
+# Commande pour lancer Laravel et appliquer migrations automatiquement
+CMD php artisan migrate --force && \
+    php artisan session:table && \
+    php artisan migrate --force && \
+    php artisan serve --host=0.0.0.0 --port=8080
