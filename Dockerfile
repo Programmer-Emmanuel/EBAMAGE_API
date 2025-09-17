@@ -19,7 +19,8 @@ RUN apt-get update && apt-get install -y \
     nodejs \
     && docker-php-ext-install pdo_pgsql mbstring zip bcmath pcntl \
     && pecl install redis \
-    && docker-php-ext-enable redis
+    && docker-php-ext-enable redis \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Installer Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -27,18 +28,18 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Définir le répertoire de travail
 WORKDIR /var/www/html
 
-# Copier et installer les dépendances PHP
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --optimize-autoloader
-
+# Copier tout le projet AVANT d’installer les dépendances
 COPY . .
 
-# Donner les droits à www-data (optionnel)
+# Installer les dépendances PHP
+RUN composer install --no-dev --optimize-autoloader
+
+# Donner les droits à www-data
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html/storage \
     && chmod -R 755 /var/www/html/bootstrap/cache
 
-# Exposer le port PHP built-in server
+# Exposer le port PHP intégré
 EXPOSE 8000
 
 # Commande par défaut : serveur PHP intégré
