@@ -12,7 +12,7 @@ services:
     networks:
       - laravel
     env_file:
-      - docker.env   # Ton .env contient déjà DB_CONNECTION=pgsql etc.
+      - .env   # Ton .env contient déjà DB_CONNECTION=pgsql etc.
 
   nginx:
     image: nginx:alpine
