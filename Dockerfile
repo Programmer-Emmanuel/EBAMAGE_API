@@ -1,5 +1,4 @@
-# Étape 1 : Image PHP 8.3 CLI
-FROM php:8.3-cli
+FROM php:8.3-fpm-bullseye
 
 # Installer les dépendances système et extensions PHP
 RUN apt-get update \
@@ -13,6 +12,7 @@ RUN apt-get update \
         libxml2-dev \
         libzip-dev \
         gmp \
+        libgmp-dev \
         apt-transport-https \
         ca-certificates \
     && docker-php-ext-install \
