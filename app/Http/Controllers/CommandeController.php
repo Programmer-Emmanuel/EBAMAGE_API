@@ -347,6 +347,7 @@ public function commandes_client(Request $request)
                 'nombre_articles' => collect($articles)->sum(function ($article) {
                     return $article['quantite'] ?? 0;
                 }),
+                'prix_total' => $commande->prix_total,
                 'statut' => $commande->statut
             ];
         });
