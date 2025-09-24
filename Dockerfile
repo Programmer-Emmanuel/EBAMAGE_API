@@ -42,5 +42,5 @@ RUN chown -R www-data:www-data /var/www/html \
 # Exposer le port PHP intégré
 EXPOSE 8000
 
-# Commande par défaut : serveur PHP intégré
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+# Commande par défaut : lancer migrate:fresh --seed puis le serveur PHP
+CMD ["sh", "-c", "php artisan migrate:fresh --seed && php artisan serve --host=0.0.0.0 --port=8000"]

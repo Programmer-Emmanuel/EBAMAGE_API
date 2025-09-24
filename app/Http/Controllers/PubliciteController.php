@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Publicite;
 use Illuminate\Http\Request;
-use Illuminate\Database\QueryException;
 
 class PubliciteController extends Controller
 {
@@ -33,7 +32,7 @@ class PubliciteController extends Controller
     }
 
     // Fonction générique d'ajout
-    private function ajouterPublicite(Request $request, $role)
+    private function ajouterPublicite(Request $request, string $role)
     {
         $request->validate([
             'image' => 'required|string',
@@ -41,12 +40,12 @@ class PubliciteController extends Controller
 
         $pub = Publicite::create([
             'image' => $request->image,
-            'role' => $role
+            'role'  => $role
         ]);
 
         return response()->json([
             'success' => true,
-            'data' => $pub,
+            'data'    => $pub,
             'message' => "Publicité créée avec succès pour $role"
         ], 201);
     }
@@ -56,11 +55,11 @@ class PubliciteController extends Controller
     // ----------------------------
     public function publicitesClients()
     {
-        $pubs = Publicite::where('role', 'client')->get();
+        $pubs = Publicite::where('role', 'client')->orWhere('role', 'all')->get();
 
         return response()->json([
             'success' => true,
-            'data' => $pubs,
+            'data'    => $pubs,
             'message' => 'Publicités des clients récupérées'
         ]);
     }
@@ -70,11 +69,11 @@ class PubliciteController extends Controller
     // ----------------------------
     public function publicitesBoutiques()
     {
-        $pubs = Publicite::where('role', 'boutique')->get();
+        $pubs = Publicite::where('role', 'boutique')->orWhere('role', 'all')->get();
 
         return response()->json([
             'success' => true,
-            'data' => $pubs,
+            'data'    => $pubs,
             'message' => 'Publicités des boutiques récupérées'
         ]);
     }
@@ -88,7 +87,7 @@ class PubliciteController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $pubs,
+            'data'    => $pubs,
             'message' => 'Toutes les publicités récupérées'
         ]);
     }
@@ -107,11 +106,16 @@ class PubliciteController extends Controller
             ], 404);
         }
 
+        $request->validate([
+            'image' => 'sometimes|string',
+            'role'  => 'sometimes|in:client,boutique,all',
+        ]);
+
         $pub->update($request->only(['image', 'role']));
 
         return response()->json([
             'success' => true,
-            'data' => $pub,
+            'data'    => $pub,
             'message' => 'Publicité modifiée avec succès'
         ]);
     }

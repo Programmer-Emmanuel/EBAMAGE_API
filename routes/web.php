@@ -160,13 +160,13 @@ Route::prefix('/api')->group(function(){
     //------------------
 
     // Créer une publicité pour les clients
-    Route::post('/publicite/clients', [PubliciteController::class, 'ajoutClient']);
+    Route::post('/publicite/ajout/clients', [PubliciteController::class, 'ajoutClient']);
 
     // Créer une publicité pour les boutiques
-    Route::post('/publicite/boutiques', [PubliciteController::class, 'ajoutBoutique']);
+    Route::post('/publicite/ajout/boutiques', [PubliciteController::class, 'ajoutBoutique']);
 
     // Créer une publicité pour tout le monde
-    Route::post('/publicite/all', [PubliciteController::class, 'ajoutToutLeMonde']);
+    Route::post('/publicite/ajout/all', [PubliciteController::class, 'ajoutToutLeMonde']);
 
     // Afficher toutes les publicités pour les clients
     Route::get('/publicite/clients', [PubliciteController::class, 'publicitesClients']);
@@ -178,7 +178,7 @@ Route::prefix('/api')->group(function(){
     Route::get('/publicites', [PubliciteController::class, 'publicitesAll']);
 
     // Modifier une publicité
-    Route::put('/publicite/{id}', [PubliciteController::class, 'modifier']);
+    Route::post('/publicite/{id}', [PubliciteController::class, 'modifier']);
 
     // Supprimer une publicité
     Route::delete('/publicite/{id}', [PubliciteController::class, 'supprimer']);

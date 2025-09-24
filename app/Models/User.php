@@ -81,10 +81,6 @@ class User extends Authenticatable
     }
 
 
-    public function publicites()
-    {
-        return $this->hasMany(Publicite::class);
-    }
 
 
 }

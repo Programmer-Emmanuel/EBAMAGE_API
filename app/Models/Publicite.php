@@ -11,15 +11,4 @@ class Publicite extends Model
         "image",
         "role"
     ];
-
-    public function user()
-    {
-        return $this->belongsTo(User::class);
-    }
-
-    // Relation avec la boutique
-    public function boutique()
-    {
-        return $this->belongsTo(Boutique::class);
-    }
 }
