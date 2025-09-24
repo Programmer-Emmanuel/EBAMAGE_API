@@ -347,13 +347,14 @@ public function commandes_client(Request $request)
                 'nombre_articles' => collect($articles)->sum(function ($article) {
                     return $article['quantite'] ?? 0;
                 }),
+                'statut' => $commande->statut
             ];
         });
 
         return response()->json([
             'success' => true,
+            'data' => $result,
             'message' => 'Commandes du client récupérées avec succès.',
-            'data' => $result
         ], 200);
 
     } catch (\Exception $e) {

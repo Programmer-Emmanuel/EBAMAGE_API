@@ -23,6 +23,7 @@ return new class extends Migration
             $table->timestamp('otp_expires_at')->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->boolean('is_verify')->default(false);
+            $table->string('device_token')->nullable()->unique();
             $table->rememberToken();
             $table->timestamps();
         });

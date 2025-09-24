@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('tel_btq', 10)->unique();
             $table->string('password_btq');
             $table->integer('solde_tdl');
+            $table->string('device_token')->nullable()->unique();
             $table->rememberToken();
             $table->timestamps();
         });

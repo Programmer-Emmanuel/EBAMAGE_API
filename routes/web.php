@@ -5,7 +5,9 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategorieController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PanierController;
+use App\Http\Controllers\PubliciteController;
 use App\Http\Controllers\RechercheController;
 use App\Http\Controllers\VariationController;
 use App\Http\Controllers\VilleCommuneController;
@@ -54,6 +56,8 @@ Route::prefix('/api')->group(function(){
         Route::get('/commande/boutique', [CommandeController::class, 'commandes_boutique']);
         Route::post('/commande/{hashid}/reception', [CommandeController::class, 'edit_statut_reception']);
         Route::post('/commande/{hashid}/annule', [CommandeController::class, 'edit_statut_annule']);
+
+
     });
 
     //CRUD VARIATION
@@ -114,6 +118,8 @@ Route::prefix('/api')->group(function(){
         Route::post('/panier/diminuer', [PanierController::class, 'diminuerQuantite']);
         Route::post('/panier/delete', [PanierController::class, 'supprimerArticle']);
 
+
+
     });
     Route::get('/commandes', [CommandeController::class, 'liste_commande']);
     Route::get('/commande/{hashid}', [CommandeController::class, 'commande']);
@@ -126,5 +132,54 @@ Route::prefix('/api')->group(function(){
     //Articles recommandés
     Route::get('/articles/recommandes', [CommandeController::class, 'articles_recommandes']);
 
+    Route::middleware('auth:sanctum')->group(function(){
+        Route::post('/device/token', [NotificationController::class, 'recupereDeviceToken']);
+        Route::get('/notifications', [NotificationController::class, 'notifications']);
+    });
 
+    //-------------------
+    //  NOTIFICATIONS
+    //------------------
+
+    //Notification à une boutique
+    Route::post('/notification/boutique', [NotificationController::class, 'notification_boutique']);
+    //Notifications à un client
+    Route::post('/notification/client', [NotificationController::class, 'notification_client']);
+    //Liste des utilisateurs avec leur device token
+    Route::get('/users', [NotificationController::class, 'liste_users']);
+    //Notifications à toutes les boutiques
+    Route::post('/notification/boutiques/all', [NotificationController::class, 'notification_toutes_boutiques']);
+    //Notifications à tous les clients
+    Route::post('/notification/clients/all', [NotificationController::class, 'notification_tous_clients']);
+    //Notifications à tout le monde
+    Route::post('/notification/all', [NotificationController::class, 'notification_tout_le_monde']);
+
+
+    //-------------------
+    //  PUBLICITES
+    //------------------
+
+    // Créer une publicité pour les clients
+    Route::post('/publicite/clients', [PubliciteController::class, 'ajoutClient']);
+
+    // Créer une publicité pour les boutiques
+    Route::post('/publicite/boutiques', [PubliciteController::class, 'ajoutBoutique']);
+
+    // Créer une publicité pour tout le monde
+    Route::post('/publicite/all', [PubliciteController::class, 'ajoutToutLeMonde']);
+
+    // Afficher toutes les publicités pour les clients
+    Route::get('/publicite/clients', [PubliciteController::class, 'publicitesClients']);
+
+    // Afficher toutes les publicités pour les boutiques
+    Route::get('/publicite/boutiques', [PubliciteController::class, 'publicitesBoutiques']);
+
+    // Afficher toutes les publicités (tout le monde)
+    Route::get('/publicites', [PubliciteController::class, 'publicitesAll']);
+
+    // Modifier une publicité
+    Route::put('/publicite/{id}', [PubliciteController::class, 'modifier']);
+
+    // Supprimer une publicité
+    Route::delete('/publicite/{id}', [PubliciteController::class, 'supprimer']);
 });

@@ -25,7 +25,8 @@ class Boutique extends Authenticatable
         'email_btq',
         'tel_btq',
         'password_btq',
-        'solde_tdl'
+        'solde_tdl',
+        'device_token',
     ];
 
     public function articles(){
@@ -34,6 +35,11 @@ class Boutique extends Authenticatable
 
     public function commandes(){
         return $this->hasMany(Commande::class, 'id_btq');
+    }
+
+        public function deviceTokens()
+    {
+        return $this->hasMany(Notification::class);
     }
 
 

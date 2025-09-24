@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use PDOException;
+use Vinkla\Hashids\Facades\Hashids;
 
 class AuthController extends Controller
 {
@@ -88,6 +89,7 @@ class AuthController extends Controller
                 'nom_clt' => $client->nom_clt,
                 'email_clt' => $client->email_clt,
                 'tel_clt' => $client->tel_clt,
+                'device_token' => $client->device_token,
                 'created_at' => $client->created_at,
                 'updated_at' => $client->updated_at
             ],
@@ -310,6 +312,8 @@ class AuthController extends Controller
                 'email_clt' => $client->email_clt,
                 'tel_clt' => $client->tel_clt,
                 'solde_tdl' => $client->solde_tdl,
+                'device_token' => $client->device_token,
+                'hashid' => Hashids::encode($client->id)
             ],
             'token' => $token
         ]);

@@ -34,6 +34,7 @@ class User extends Authenticatable
         'solde_tdl',
         'code_otp',
         'otp_expires_at',
+        'device_token',
     ];
 
 
@@ -72,6 +73,17 @@ class User extends Authenticatable
 
     public function paniers(){
         return $this->hasMany(Panier::class, 'id_clt');
+    }
+
+        public function deviceTokens()
+    {
+        return $this->hasMany(Notification::class);
+    }
+
+
+    public function publicites()
+    {
+        return $this->hasMany(Publicite::class);
     }
 
 
