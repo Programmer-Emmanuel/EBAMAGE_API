@@ -10,6 +10,7 @@
         "doctrine/dbal": "^4.3",
         "google/auth": "^1.49",
         "illuminate/database": "*",
+        "kreait/laravel-firebase": "6.1.0",
         "laravel/framework": "^12.0",
         "laravel/sanctum": "^4.1",
         "laravel/tinker": "^2.10.1",
