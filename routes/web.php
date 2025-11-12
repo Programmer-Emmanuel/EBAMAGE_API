@@ -82,7 +82,10 @@ Route::get('/test-mail', function() {
         Route::post('/reclammer/du', [CommandeController::class, 'reclammer_du']);
         Route::get('/solde/boutique', [CommandeController::class, 'solde_boutique']);
         
-    Route::post('/variation/{hashid}/update', [VariationController::class, 'update_variation']);
+        Route::post('/variation/{hashid}/update', [VariationController::class, 'update_variation']);
+
+        //deconnexion
+        Route::post('/deconnexion/boutique', [AuthController::class, 'deconnexion']);
 
     });
 
@@ -298,5 +301,7 @@ Route::get('/test-mail', function() {
         
         Route::post('/variation/{hashid}/delete', [VariationController::class, 'delete_variation']);
      });
+
+     Route::get('/test-fcm', [NotificationController::class, 'send']);
 
 });

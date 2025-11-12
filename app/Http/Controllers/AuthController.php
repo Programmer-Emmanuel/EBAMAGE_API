@@ -1116,5 +1116,37 @@ public function update_infos_admin(Request $request)
         }
     }
 
+    public function deconnexion(Request $request){
+        try{
+            $user = $request->user();
+            if(!$user){
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Boutique non connecté'
+                ],403);
+            }
+            $boutique = Boutique::where('id', $user->id)->first();
+            if(!$boutique){
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Boutique non trouvé'
+                ],404);
+            }
+            $boutique->device_token = null;
+            $boutique->save();
+            return response()->json([
+                'success' => true,
+                'message' => 'decconnexion reussie'
+            ],200);
+        }
+        catch(QueryException $e){
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur survenue lors de la deconnexion.',
+                'erreur' => $e->getMessage()
+            ],500);
+        }
+    }
+
 
 }

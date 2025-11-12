@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Models\Boutique;
 use App\Models\Notification;
+use Google\Auth\Credentials\ServiceAccountCredentials;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -23,22 +24,37 @@ class NotificationController extends Controller
     ]);
 
     try {
-        // Décodage du hashid pour récupérer l'id numérique
+        // 🔒 Récupération de l'utilisateur connecté
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Utilisateur non authentifié.'
+            ], 401);
+        }
+
+        // 🔍 Décodage du hashid reçu
         $decoded = Hashids::decode($request->hashid);
 
         if (empty($decoded)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Identifiant invalide'
+                'message' => 'Identifiant invalide.'
             ], 400);
         }
 
-        $id = $decoded[0]; // premier élément du tableau décodé
+        $id = $decoded[0];
 
-        // Recherche d'abord dans la table User
-        $user = User::find($id);
+        // 🧩 Vérifie le type d’utilisateur connecté (client ou boutique)
+        if ($user instanceof \App\Models\User) {
+            if ($user->id !== $id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'L\'ID ne correspond pas à l\'utilisateur connecté.'
+                ], 403);
+            }
 
-        if ($user) {
             $user->update([
                 'device_token' => $request->device_token
             ]);
@@ -47,15 +63,19 @@ class NotificationController extends Controller
                 'success' => true,
                 'device_token' => $request->device_token,
                 'user_type' => 'client',
-                'message' => 'Device Token enregistré avec succès pour l\'utilisateur'
+                'message' => 'Device Token enregistré avec succès pour le client.'
             ]);
         }
 
-        // Si pas trouvé dans User, recherche dans Boutique
-        $boutique = Boutique::find($id);
+        if ($user instanceof \App\Models\Boutique) {
+            if ($user->id !== $id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'L\'ID ne correspond pas à la boutique connectée.'
+                ], 403);
+            }
 
-        if ($boutique) {
-            $boutique->update([
+            $user->update([
                 'device_token' => $request->device_token
             ]);
 
@@ -63,15 +83,15 @@ class NotificationController extends Controller
                 'success' => true,
                 'device_token' => $request->device_token,
                 'user_type' => 'boutique',
-                'message' => 'Device Token enregistré avec succès pour la boutique'
+                'message' => 'Device Token enregistré avec succès pour la boutique.'
             ]);
         }
 
-        // Si aucun utilisateur ou boutique trouvé
+        // 🚫 Si l'utilisateur connecté n'est ni client ni boutique
         return response()->json([
             'success' => false,
-            'message' => 'Aucun utilisateur ou boutique trouvé avec cet identifiant'
-        ], 404);
+            'message' => 'Type d’utilisateur non reconnu.'
+        ], 400);
 
     } catch (\Exception $e) {
         Log::error('Erreur lors de l\'enregistrement du token: ' . $e->getMessage());
@@ -83,6 +103,7 @@ class NotificationController extends Controller
         ], 500);
     }
 }
+
 
     // ----------------------------
     // 2. Envoyer notification à un client via device token
@@ -323,7 +344,7 @@ class NotificationController extends Controller
     // ----------------------------
 private function sendFcmNotification($deviceToken, $title, $body, $type = null)
 {
-    // ✅ Si le token commence par "ExponentPushToken", on passe par l'API Expo
+    // ✅ Si c’est un token Expo (React Native / Expo)
     if (str_starts_with($deviceToken, 'ExponentPushToken')) {
         $data = [
             'to' => $deviceToken,
@@ -341,34 +362,50 @@ private function sendFcmNotification($deviceToken, $title, $body, $type = null)
         ])->post('https://exp.host/--/api/v2/push/send', $data);
     }
 
-    // ✅ Sinon, on utilise l'envoi via Firebase Cloud Messaging (FCM)
-    $serverKey = env('FCM_SERVER_KEY');
+    // ✅ Envoi via Firebase HTTP v1
+    $projectId = env('FCM_PROJECT_ID');
+    $credentialsPath = base_path(env('GOOGLE_APPLICATION_CREDENTIALS'));
 
-    if (!$serverKey) {
-        Log::error('Clé FCM non configurée');
-        throw new \Exception('Clé FCM non configurée');
+    if (!file_exists($credentialsPath)) {
+        Log::error("Fichier de compte de service introuvable : {$credentialsPath}");
+        throw new \Exception("Fichier de compte de service introuvable : {$credentialsPath}");
     }
 
-    $data = [
-        'to' => $deviceToken,
-        'notification' => [
-            'title' => $title,
-            'body' => $body,
-            'sound' => 'default',
-        ],
-        'priority' => 'high',
-    ];
+    try {
+        $scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
+        $credentials = new ServiceAccountCredentials($scopes, $credentialsPath);
+        $accessToken = $credentials->fetchAuthToken()['access_token'];
 
-    if ($type) {
-        $data['data'] = [
-            'type' => $type
+        $data = [
+            'message' => [
+                'token' => $deviceToken,
+                'notification' => [
+                    'title' => $title,
+                    'body' => $body,
+                ],
+                'data' => [
+                    'type' => $type ?? 'default'
+                ],
+            ],
         ];
-    }
 
-    return Http::withHeaders([
-        'Authorization' => 'key=' . $serverKey,
-        'Content-Type' => 'application/json',
-    ])->post('https://fcm.googleapis.com/fcm/send', $data);
+        $url = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $accessToken,
+            'Content-Type' => 'application/json',
+        ])->post($url, $data);
+
+        if ($response->failed()) {
+            Log::error('Erreur FCM: ' . $response->body());
+        }
+
+        return $response->json();
+
+    } catch (\Exception $e) {
+        Log::error('Erreur lors de l’envoi FCM : ' . $e->getMessage());
+        throw $e;
+    }
 }
 
 
@@ -475,4 +512,44 @@ private function sendFcmNotification($deviceToken, $title, $body, $type = null)
             'message' => 'Notification envoyée à tous les clients et boutiques'
         ]);
     }
+
+
+    public function send()
+    {
+        // 1️⃣ Récupération du chemin du fichier JSON et du projet
+        $path = base_path(env('GOOGLE_APPLICATION_CREDENTIALS'));
+        $projectId = env('FCM_PROJECT_ID');
+
+        // 2️⃣ Génération du token OAuth2
+        $scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
+        $credentials = new ServiceAccountCredentials($scopes, $path);
+        $token = $credentials->fetchAuthToken();
+        $accessToken = $token['access_token'];
+
+        // 3️⃣ Données du message
+        $deviceToken = "czOL4lcZVLveRy80rdEMto:APA91bGl0hSlk0BUjWKkJ8mSZQW0KstXKobyE2zrcjMcR1MVJEk7mLnbp0_GtnGKAzL9OwAKnwHMqtH4dHzJobsoL1l9j8uAOCj2wfQLYHJ72wWiA0XzT1k";
+
+        $message = [
+            "message" => [
+                "token" => $deviceToken,
+                "notification" => [
+                    "title" => "Test Laravel FCM",
+                    "body"  => "Message envoyé via Firebase HTTP v1 🎯"
+                ]
+            ]
+        ];
+
+        // 4️⃣ Envoi à Firebase
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $accessToken,
+            'Content-Type' => 'application/json',
+        ])->post("https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send", $message);
+
+        // 5️⃣ Retour du résultat
+        return response()->json([
+            'status' => $response->status(),
+            'body' => $response->json(),
+        ]);
+    }
+
 }
