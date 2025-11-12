@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: laravel_app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/var/www/html
+    environment:
+      APP_ENV: local
+      APP_DEBUG: 'true'
+      APP_URL: http://localhost:8000
+      DB_CONNECTION: pgsql
+      DB_URL: ${DB_URL}
+      SESSION_DRIVER: database
+      CACHE_STORE: database
+      QUEUE_CONNECTION: database
+      MAIL_MAILER: smtp
+      MAIL_HOST: smtp.gmail.com
+      MAIL_PORT: 587
+      MAIL_USERNAME: marcbamidele@gmail.com
+      MAIL_PASSWORD: zfeepoiwmsvpqpys
+      MAIL_ENCRYPTION: tls
+      MAIL_FROM_ADDRESS: marcbamidele@gmail.com
+      MAIL_FROM_NAME: EBAMAGE
+    networks:
+      - laravel
+
+networks:
+  laravel:
+    driver: bridge
