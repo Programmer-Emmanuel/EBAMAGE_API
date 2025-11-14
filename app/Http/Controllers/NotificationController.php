@@ -136,7 +136,7 @@ class NotificationController extends Controller
                 $request->type
             );
 
-            if ($response->successful()) {
+            if ($response) {
                 Notification::create([
                     'user_id' => $user->id,
                     'device_token' => $request->device_token,
@@ -202,7 +202,7 @@ class NotificationController extends Controller
                 $request->type
             );
 
-            if ($response->successful()) {
+            if ($response) {
                 Notification::create([
                     'boutique_id' => $boutique->id,
                     'device_token' => $request->device_token,
