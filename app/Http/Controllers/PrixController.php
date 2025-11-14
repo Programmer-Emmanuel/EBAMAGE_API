@@ -116,6 +116,29 @@ class PrixController extends Controller
             ],500);
         }
     }
+    public function prix_afficher(){
+        try{
+           $prix = Prix::where('id', 1)->first();
+           if(!$prix){
+            return response()->json([
+                'success' => false,
+                'message' => 'Il n’y a aucun prix qui a été fixé.'
+            ],404);
+           }
+           return response()->json([
+            'success' => true,
+            'value' => $prix->prix,
+            'message' => 'Prix de livraison affiché avec succès'
+           ],200);
+        }
+        catch(QueryException $e){
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de l’affichage du prix de la livraison',
+                'erreur' => $e->getMessage()
+            ],500);
+        }
+    }
 
 
 }

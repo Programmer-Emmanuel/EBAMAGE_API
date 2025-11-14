@@ -1359,15 +1359,15 @@ public function reclammer_du(Request $request)
     DB::beginTransaction();
 
     try {
-        // 💰 Calcul du montant dû à la boutique (90 % du prix total des articles)
         $articles = json_decode($commande->articles, true);
 
         $total_articles = collect($articles)->sum(function ($article) {
-            return $article['prix'] * $article['quantite'];
+            return (float) $article['prix'] * (int) $article['quantite'];
         });
 
-        // ✅ 90% pour la boutique
-        $montant_boutique = $total_articles * 0.9;
+        // 90% pour la boutique
+        $montant_boutique = $commande->prix_total * 0.9;
+
 
         // 🔍 Vérifier si un portefeuille existe déjà
         $deja_cree = Portefeuille::where('id_commande', $commande->id)

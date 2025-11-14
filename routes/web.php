@@ -183,6 +183,8 @@ Route::get('/test-mail', function() {
 
     Route::get('/articles/boutique/{hashid}', [ArticleController::class, 'articlesBoutique']);
 
+    Route::get('/price-delivery', [PrixController::class, 'prix_afficher']);
+
 
 
     //-------------------------
