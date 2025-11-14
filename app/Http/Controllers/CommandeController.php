@@ -1537,6 +1537,10 @@ public function marquerCommePayee(Request $request, $hashid)
             'statut' => 'Payé',
             'updated_at' => now(),
         ]);
+        $commande = Commande::where('id', $portefeuille->id_beneficiaire)->where('role', 'boutique')->first();
+        $admin = Admin::where('role', 'super_admin')->first();
+        $admin->solde_admin += $commande->montant * 0.1;
+        $admin->save();
 
         return response()->json([
             'success' => true,
