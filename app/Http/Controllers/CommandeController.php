@@ -372,11 +372,12 @@ public function rechercherCommande(Request $request)
     return $response;
 }
 
-public function edit_statut_livree($hashid)
+public function edit_statut_livree($hashid) 
 {
     $response = $this->updateStatutCommande($hashid, 'Livrée');
 
-    if ($response->getData()->success ?? false) {
+    if (($response->getData()->success ?? false) === true) {
+
         $commande = Commande::where('id', Hashids::decode($hashid)[0] ?? null)
             ->with(['client', 'boutique'])
             ->first();
@@ -388,42 +389,40 @@ public function edit_statut_livree($hashid)
             ], 404);
         }
 
-        // 🟩 Calcul de la commission admin (10%)
+        // 🟧 Total des articles (100% ira à l'admin)
         $articles = json_decode($commande->articles, true);
-        $total_commission = 0;
+        $total_commande = collect($articles)->sum(
+            fn($article) => $article['prix'] * $article['quantite']
+        );
 
-        foreach ($articles as $article) {
-            $prix_article = $article['prix'] * $article['quantite'];
-            $commission = ($prix_article * 10) / 100;
-            $total_commission += $commission;
-        }
-
-        // 🟨 Mise à jour du solde admin
+        // 🟨 Toutes les recettes vont à l’admin (100%)
         $admin = Admin::where('role', 'super_admin')->first();
         if ($admin) {
-            $admin->solde_admin += $total_commission;
+            $admin->solde_admin += $total_commande;
             $admin->save();
         }
 
-        // 🟩 Mettre à jour le portefeuille du livreur
+        // 🟦 Mettre à jour le portefeuille du livreur
         $portefeuilleLivreur = Portefeuille::where('id_commande', $commande->id)
             ->where('role', 'livreur')
             ->first();
 
         if ($portefeuilleLivreur) {
-            $portefeuilleLivreur->statut = 'Payé';
-            $portefeuilleLivreur->is_paid = 1; // au cas où tu as une colonne booléenne
-            $portefeuilleLivreur->save();
+            $portefeuilleLivreur->update([
+                'statut' => 'Payé',
+                'is_paid' => 1
+            ]);
         }
 
         return response()->json([
             'success' => true,
-            'message' => 'Commande marquée comme livrée. Portefeuilles mis à jour avec succès.'
+            'message' => 'Commande marquée comme livrée. L’argent a été ajouté à l’admin.',
         ], 200);
     }
 
     return $response;
 }
+
 
 
 public function edit_statut_annule($hashid)
@@ -1285,6 +1284,7 @@ $portefeuille_livreur = Portefeuille::where('role', 'livreur')
                     ];
                 })->values(),
                 'statut' => $commande->statut,
+                'is_claimed' => $commande->is_claimed,
                 'code_commande' => $commande->code_commande,
                 'moyen_de_paiement' => $commande->moyen_de_paiement == 1 ? 'à la livraison' : 'en ligne',
                 'created_at' => $commande->created_at->toDateTimeString(),
@@ -1493,27 +1493,24 @@ public function marquerCommePayee(Request $request, $hashid)
 {
     $admin = $request->user();
 
-    // 🔒 Vérifier si c'est bien un super administrateur
     if ($admin->role !== 'super_admin') {
         return response()->json([
             'success' => false,
-            'message' => 'Accès refusé. Vous devez être un super administrateur.'
+            'message' => 'Accès refusé.'
         ], 403);
     }
 
     try {
-        // 🔍 Décoder et récupérer l’ID
         $decoded = Hashids::decode($hashid);
+
         if (empty($decoded)) {
             return response()->json([
                 'success' => false,
-                'message' => 'ID de la reclamation invalide.'
+                'message' => 'ID invalide.'
             ], 400);
         }
 
         $id = $decoded[0];
-
-        // 🧾 Trouver le portefeuille
         $portefeuille = Portefeuille::find($id);
 
         if (!$portefeuille) {
@@ -1523,35 +1520,63 @@ public function marquerCommePayee(Request $request, $hashid)
             ], 404);
         }
 
-        // 🚫 Vérifier s’il est déjà payé
         if ($portefeuille->is_paid) {
             return response()->json([
                 'success' => false,
-                'message' => 'Cette reclamation a déjà été marqué comme payé.'
+                'message' => 'Déjà payé.'
             ], 400);
         }
 
-        // ✅ Marquer comme payé
+        // 🟧 On récupère la commande liée
+        $commande = Commande::find($portefeuille->id_commande);
+
+        if (!$commande) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Commande associée introuvable.'
+            ], 404);
+        }
+
+        // 🟩 Recalcul du total
+        $articles = json_decode($commande->articles, true);
+
+        $total = collect($articles)->sum(
+            fn($a) => $a['prix'] * $a['quantite']
+        );
+
+        // 90% pour la boutique
+        $montant_boutique = $total * 0.90;
+
+        // 🟥 Retirer 90% du solde admin
+        $realAdmin = Admin::where('role', 'super_admin')->first();
+
+        if ($realAdmin) {
+            $realAdmin->solde_admin -= $montant_boutique;
+
+            if ($realAdmin->solde_admin < 0) {
+                $realAdmin->solde_admin = 0; // sécurité
+            }
+
+            $realAdmin->save();
+        }
+
+        // 🟢 Marquer le portefeuille comme payé
         $portefeuille->update([
             'is_paid' => true,
             'statut' => 'Payé',
             'updated_at' => now(),
         ]);
-        $commande = Commande::where('id', $portefeuille->id_beneficiaire)->where('role', 'boutique')->first();
-        $admin = Admin::where('role', 'super_admin')->first();
-        $admin->solde_admin += $commande->prix_total * 0.1;
-        $admin->save();
 
         return response()->json([
             'success' => true,
-            'message' => 'La reclammation a été marqué comme payé avec succès.',
+            'message' => 'Paiement effectué. 90% retirés de l’admin.',
             'data' => $portefeuille,
         ]);
 
     } catch (\Exception $e) {
         return response()->json([
             'success' => false,
-            'message' => 'Erreur lors de la mise à jour du paiement.',
+            'message' => 'Erreur lors du paiement.',
             'erreur' => $e->getMessage(),
         ], 500);
     }
