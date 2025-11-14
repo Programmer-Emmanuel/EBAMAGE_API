@@ -897,7 +897,7 @@ private function sendStatusNotification($commande, $nouveauStatut, $ancienStatut
         return;
     }
 
-    $commandeCode = '#' . \Vinkla\Hashids\Facades\Hashids::encode($commande->id);
+    $commandeCode = '#'.$commande->code_commande;
 
     switch ($nouveauStatut) {
         case 'Reçue':
