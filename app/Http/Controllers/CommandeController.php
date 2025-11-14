@@ -29,6 +29,7 @@ use App\Models\Prix;
 use App\Models\Seuil;
 use Carbon\Carbon;
 use Google\Auth\Credentials\ServiceAccountCredentials;
+use Google\Auth\OAuth2;
 use Illuminate\Support\Str;
 
 class CommandeController extends Controller
@@ -703,256 +704,269 @@ public function edit_statut_sous_commande(Request $request, $hashid_commande, $h
         }
     }
 
-    /**
-     * Envoi automatique de notification (Expo ou Firebase)
-     */
-    private function sendPushNotification($deviceToken, $title, $body, $type = null)
-    {
-        if (empty($deviceToken)) {
-            Log::warning("⚠️ Aucun device token fourni pour la notification.");
-            return false;
-        }
 
-        // ✅ Si c’est un token Expo (React Native / Expo)
-        if (str_starts_with($deviceToken, 'ExponentPushToken')) {
-            try {
-                $data = [
-                    'to' => $deviceToken,
-                    'sound' => 'default',
-                    'title' => $title,
-                    'body' => $body,
-                    'data' => [
-                        'type' => $type ?? 'default',
-                    ],
-                ];
 
-                $response = Http::withHeaders([
-                    'Content-Type' => 'application/json',
-                    'Accept' => 'application/json',
-                ])->post('https://exp.host/--/api/v2/push/send', $data);
+private function sendPushNotification($deviceToken, $title, $body, $type = null)
+{
+    if (empty($deviceToken)) {
+        Log::warning("⚠️ Aucun device token fourni pour la notification.");
+        return false;
+    }
 
-                if ($response->failed()) {
-                    Log::error('❌ Erreur Expo: ' . $response->body());
-                    return false;
-                }
-
-                $responseData = $response->json();
-                if (isset($responseData['data'][0]['status']) && $responseData['data'][0]['status'] === 'ok') {
-                    Log::info("✅ Notification Expo envoyée avec succès", ['to' => $deviceToken]);
-                    return true;
-                }
-
-                $errorMessage = $responseData['data'][0]['message'] ?? 'Erreur inconnue Expo';
-                Log::error("Erreur Expo: $errorMessage", ['response' => $responseData]);
-                return false;
-
-            } catch (\Throwable $e) {
-                Log::error('Erreur lors de l’envoi via Expo : ' . $e->getMessage());
-                return false;
-            }
-        }
-
-        // ✅ Sinon, envoi via Firebase HTTP v1
+    // ✅ Cas 1 : Token Expo (React Native)
+    if (str_starts_with($deviceToken, 'ExponentPushToken')) {
         try {
-            $projectId = env('FCM_PROJECT_ID');
-            $credentialsPath = base_path(env('GOOGLE_APPLICATION_CREDENTIALS'));
-
-            if (!file_exists($credentialsPath)) {
-                Log::error("❌ Fichier de compte de service introuvable : {$credentialsPath}");
-                return false;
-            }
-
-            $scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
-            $credentials = new ServiceAccountCredentials($scopes, $credentialsPath);
-            $accessToken = $credentials->fetchAuthToken()['access_token'];
-
-            $payload = [
-                'message' => [
-                    'token' => $deviceToken,
-                    'notification' => [
-                        'title' => $title,
-                        'body' => $body,
-                    ],
-                    'data' => [
-                        'type' => $type ?? 'default',
-                    ],
+            $data = [
+                'to' => $deviceToken,
+                'sound' => 'default',
+                'title' => $title,
+                'body' => $body,
+                'data' => [
+                    'type' => $type ?? 'default',
                 ],
             ];
 
-            $url = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
-
             $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $accessToken,
                 'Content-Type' => 'application/json',
-            ])->post($url, $payload);
+                'Accept' => 'application/json',
+            ])->post('https://exp.host/--/api/v2/push/send', $data);
 
             if ($response->failed()) {
-                Log::error('❌ Erreur FCM: ' . $response->body());
+                Log::error('❌ Erreur Expo: ' . $response->body());
                 return false;
             }
 
-            Log::info("✅ Notification FCM envoyée avec succès", ['to' => $deviceToken]);
-            return true;
+            $res = $response->json();
+            if (isset($res['data'][0]['status']) && $res['data'][0]['status'] === 'ok') {
+                Log::info("✅ Notification Expo envoyée avec succès", ['to' => $deviceToken]);
+                return true;
+            }
+
+            $error = $res['data'][0]['message'] ?? 'Erreur inconnue Expo';
+            Log::error("❌ Erreur Expo: $error", ['response' => $res]);
+            return false;
 
         } catch (\Throwable $e) {
-            Log::error('Erreur lors de l’envoi FCM : ' . $e->getMessage());
+            Log::error('Erreur lors de l’envoi via Expo : ' . $e->getMessage());
             return false;
         }
     }
 
-    /**
-     * Enregistrer et envoyer une notification
-     */
-    private function saveAndSendNotification($data, $deviceToken = null)
-    {
-        try {
-            // 🔔 Envoi de la notification (Expo ou FCM)
-            if (!empty($deviceToken)) {
-                $this->sendPushNotification(
-                    $deviceToken,
-                    $data['title'],
-                    $data['message'],
-                    $data['type'] ?? 'general'
+    // ✅ Cas 2 : Firebase FCM HTTP v1
+    try {
+        $projectId = env('FCM_PROJECT_ID');
+        $credentialsPath = base_path(env('GOOGLE_APPLICATION_CREDENTIALS'));
+
+        if (!file_exists($credentialsPath)) {
+            Log::error("❌ Fichier de compte de service introuvable : {$credentialsPath}");
+            return false;
+        }
+
+        // Nouvelle méthode d'authentification OAuth2 (plus stable que ServiceAccountCredentials)
+        $jsonKey = json_decode(file_get_contents($credentialsPath), true);
+        $oauth2 = new OAuth2([
+            'audience' => 'https://oauth2.googleapis.com/token',
+            'issuer' => $jsonKey['client_email'],
+            'signingAlgorithm' => 'RS256',
+            'signingKey' => $jsonKey['private_key'],
+            'tokenCredentialUri' => 'https://oauth2.googleapis.com/token',
+            'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
+        ]);
+
+        $accessToken = $oauth2->fetchAuthToken()['access_token'] ?? null;
+        if (!$accessToken) {
+            Log::error("❌ Impossible de générer un token OAuth2 pour FCM.");
+            return false;
+        }
+
+        $payload = [
+            'message' => [
+                'token' => $deviceToken,
+                'notification' => [
+                    'title' => $title,
+                    'body' => $body,
+                ],
+                'data' => [
+                    'type' => $type ?? 'default',
+                ],
+            ],
+        ];
+
+        $url = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $accessToken,
+            'Content-Type' => 'application/json',
+        ])->post($url, $payload);
+
+        if ($response->failed()) {
+            Log::error('❌ Erreur FCM: ' . $response->body());
+            return false;
+        }
+
+        Log::info("✅ Notification FCM envoyée avec succès", ['to' => $deviceToken]);
+        return true;
+
+    } catch (\Throwable $e) {
+        Log::error('Erreur lors de l’envoi FCM : ' . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Enregistrer et envoyer une notification
+ */
+private function saveAndSendNotification($data, $deviceToken = null)
+{
+    try {
+        // 🔔 Envoi de la notification (Expo ou FCM)
+        if (!empty($deviceToken)) {
+            $this->sendPushNotification(
+                $deviceToken,
+                $data['title'],
+                $data['message'],
+                $data['type'] ?? 'general'
+            );
+        }
+
+        // 💾 Sauvegarde en BDD
+        NotificationModel::create($data);
+        Log::info("✅ Notification enregistrée en BDD", $data);
+
+        return true;
+    } catch (\Throwable $e) {
+        Log::error("Erreur enregistrement/envoi notification : " . $e->getMessage(), [
+            'trace' => $e->getTraceAsString(),
+            'data' => $data,
+        ]);
+        return false;
+    }
+}
+
+/**
+ * Envoyer notification à une boutique
+ */
+private function sendNotificationToBoutique($boutique, $title, $message, $type = null)
+{
+    if (!$boutique || !$boutique->id) {
+        Log::warning("⚠️ Impossible d'envoyer notification : boutique invalide");
+        return false;
+    }
+
+    $data = [
+        'boutique_id' => $boutique->id,
+        'user_id' => null,
+        'title' => $title,
+        'message' => $message,
+        'type' => $type ?? 'general',
+    ];
+
+    return $this->saveAndSendNotification($data, $boutique->device_token ?? null);
+}
+
+/**
+ * Envoyer notification à un client
+ */
+private function sendNotificationToClient($client, $title, $message, $type = null)
+{
+    if (!$client || !$client->id) {
+        Log::warning("⚠️ Impossible d'envoyer notification : client invalide");
+        return false;
+    }
+
+    $data = [
+        'user_id' => $client->id,
+        'boutique_id' => null,
+        'title' => $title,
+        'message' => $message,
+        'type' => $type ?? 'general',
+    ];
+
+    return $this->saveAndSendNotification($data, $client->device_token ?? null);
+}
+
+/**
+ * Envoyer notifications selon changement de statut
+ */
+private function sendStatusNotification($commande, $nouveauStatut, $ancienStatut)
+{
+    $client = $commande->client;
+    $boutique = $commande->boutique;
+
+    if (!$client && !$boutique) {
+        Log::warning("⚠️ Aucun destinataire pour la commande {$commande->id}");
+        return;
+    }
+
+    $commandeCode = '#' . \Vinkla\Hashids\Facades\Hashids::encode($commande->id);
+
+    switch ($nouveauStatut) {
+        case 'Reçue':
+            if ($client) {
+                $this->sendNotificationToClient(
+                    $client,
+                    "Commande Reçue 🏪",
+                    "Votre commande $commandeCode a été reçue par la boutique et est en cours de préparation.",
+                    'commande_recue'
                 );
             }
 
-            // 💾 Sauvegarde en BDD
-            NotificationModel::create($data);
-            Log::info("✅ Notification enregistrée en BDD", $data);
+            if ($boutique) {
+                $this->sendNotificationToBoutique(
+                    $boutique,
+                    "Commande Réceptionnée ✅",
+                    "Vous avez marqué la commande $commandeCode comme réceptionnée. Préparez-la pour la livraison.",
+                    'commande_recue'
+                );
+            }
+            break;
 
-            return true;
-        } catch (\Throwable $e) {
-            Log::error("Erreur enregistrement/envoi notification : " . $e->getMessage(), [
-                'trace' => $e->getTraceAsString(),
-                'data' => $data,
-            ]);
-            return false;
-        }
+        case 'Livrée':
+            if ($client) {
+                $this->sendNotificationToClient(
+                    $client,
+                    "Commande Livrée 🎉",
+                    "Votre commande $commandeCode a été livrée avec succès ! Merci pour votre confiance.",
+                    'commande_livree'
+                );
+            }
+
+            if ($boutique) {
+                $this->sendNotificationToBoutique(
+                    $boutique,
+                    "Commande Livrée ✅",
+                    "La commande $commandeCode a été marquée comme livrée. Transaction terminée.",
+                    'commande_livree'
+                );
+            }
+            break;
+
+        case 'Annulée':
+            if ($client) {
+                $this->sendNotificationToClient(
+                    $client,
+                    "Commande Annulée ❌",
+                    "Votre commande $commandeCode a été annulée. Si c’est une erreur, contactez la boutique.",
+                    'commande_annulee'
+                );
+            }
+
+            if ($boutique) {
+                $this->sendNotificationToBoutique(
+                    $boutique,
+                    "Commande Annulée ❌",
+                    "Vous avez annulé la commande $commandeCode. Le client a été notifié.",
+                    'commande_annulee'
+                );
+            }
+            break;
+
+        default:
+            Log::info("ℹ️ Aucun traitement défini pour le statut '{$nouveauStatut}' de la commande {$commande->id}");
+            break;
     }
+}
 
-    /**
-     * Envoyer notification à une boutique
-     */
-    private function sendNotificationToBoutique($boutique, $title, $message, $type = null)
-    {
-        if (!$boutique || !$boutique->id) {
-            Log::warning("⚠️ Impossible d'envoyer notification : boutique invalide");
-            return false;
-        }
-
-        $data = [
-            'boutique_id' => $boutique->id,
-            'user_id' => null,
-            'title' => $title,
-            'message' => $message,
-            'type' => $type ?? 'general',
-        ];
-
-        return $this->saveAndSendNotification($data, $boutique->device_token ?? null);
-    }
-
-    /**
-     * Envoyer notification à un client
-     */
-    private function sendNotificationToClient($client, $title, $message, $type = null)
-    {
-        if (!$client || !$client->id) {
-            Log::warning("⚠️ Impossible d'envoyer notification : client invalide");
-            return false;
-        }
-
-        $data = [
-            'user_id' => $client->id,
-            'boutique_id' => null,
-            'title' => $title,
-            'message' => $message,
-            'type' => $type ?? 'general',
-        ];
-
-        return $this->saveAndSendNotification($data, $client->device_token ?? null);
-    }
-
-    /**
-     * Envoyer notifications selon changement de statut
-     */
-    private function sendStatusNotification($commande, $nouveauStatut, $ancienStatut)
-    {
-        $client = $commande->client;
-        $boutique = $commande->boutique;
-
-        if (!$client && !$boutique) {
-            Log::warning("⚠️ Aucun destinataire pour la commande {$commande->id}");
-            return;
-        }
-
-        $commandeCode = '#' . Hashids::encode($commande->id);
-
-        switch ($nouveauStatut) {
-            case 'Reçue':
-                if ($client) {
-                    $this->sendNotificationToClient(
-                        $client,
-                        "Commande Reçue 🏪",
-                        "Votre commande $commandeCode a été reçue par la boutique et est en cours de préparation.",
-                        'commande_recue'
-                    );
-                }
-
-                if ($boutique) {
-                    $this->sendNotificationToBoutique(
-                        $boutique,
-                        "Commande Réceptionnée ✅",
-                        "Vous avez marqué la commande $commandeCode comme réceptionnée. Préparez-la pour la livraison.",
-                        'commande_recue'
-                    );
-                }
-                break;
-
-            case 'Livrée':
-                if ($client) {
-                    $this->sendNotificationToClient(
-                        $client,
-                        "Commande Livrée 🎉",
-                        "Votre commande $commandeCode a été livrée avec succès ! Merci pour votre confiance.",
-                        'commande_livree'
-                    );
-                }
-
-                if ($boutique) {
-                    $this->sendNotificationToBoutique(
-                        $boutique,
-                        "Commande Livrée ✅",
-                        "La commande $commandeCode a été marquée comme livrée. Transaction terminée.",
-                        'commande_livree'
-                    );
-                }
-                break;
-
-            case 'Annulée':
-                if ($client) {
-                    $this->sendNotificationToClient(
-                        $client,
-                        "Commande Annulée ❌",
-                        "Votre commande $commandeCode a été annulée. Si c’est une erreur, contactez la boutique.",
-                        'commande_annulee'
-                    );
-                }
-
-                if ($boutique) {
-                    $this->sendNotificationToBoutique(
-                        $boutique,
-                        "Commande Annulée ❌",
-                        "Vous avez annulé la commande $commandeCode. Le client a été notifié.",
-                        'commande_annulee'
-                    );
-                }
-                break;
-
-            default:
-                Log::info("ℹ️ Aucun traitement défini pour le statut '{$nouveauStatut}' de la commande {$commande->id}");
-                break;
-        }
-    }
     /**
      * Récupérer les notifications pour l'utilisateur connecté
      */

@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Boutique;
 use App\Models\Notification;
 use Google\Auth\Credentials\ServiceAccountCredentials;
+use Google\Auth\OAuth2;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -344,39 +345,32 @@ class NotificationController extends Controller
     // ----------------------------
 private function sendFcmNotification($deviceToken, $title, $body, $type = null)
 {
-    // ✅ Si c’est un token Expo (React Native / Expo)
-    if (str_starts_with($deviceToken, 'ExponentPushToken')) {
-        $data = [
-            'to' => $deviceToken,
-            'sound' => 'default',
-            'title' => $title,
-            'body' => $body,
-            'data' => [
-                'type' => $type ?? 'default',
-            ],
-        ];
-
-        return Http::withHeaders([
-            'Content-Type' => 'application/json',
-            'Accept' => 'application/json',
-        ])->post('https://exp.host/--/api/v2/push/send', $data);
-    }
-
-    // ✅ Envoi via Firebase HTTP v1
     $projectId = env('FCM_PROJECT_ID');
     $credentialsPath = base_path(env('GOOGLE_APPLICATION_CREDENTIALS'));
 
     if (!file_exists($credentialsPath)) {
         Log::error("Fichier de compte de service introuvable : {$credentialsPath}");
-        throw new \Exception("Fichier de compte de service introuvable : {$credentialsPath}");
+        return false;
     }
 
     try {
-        $scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
-        $credentials = new ServiceAccountCredentials($scopes, $credentialsPath);
-        $accessToken = $credentials->fetchAuthToken()['access_token'];
+        // ✅ Génération du token d’accès avec OAuth2 (méthode moderne)
+        $jsonKey = json_decode(file_get_contents($credentialsPath), true);
+        $privateKey = str_replace("\\n", "\n", $jsonKey['private_key']);
 
-        $data = [
+        $oauth2 = new OAuth2([
+            'audience' => 'https://oauth2.googleapis.com/token',
+            'issuer' => $jsonKey['client_email'],
+            'signingAlgorithm' => 'RS256',
+            'signingKey' => $privateKey,
+            'tokenCredentialUri' => 'https://oauth2.googleapis.com/token',
+            'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
+        ]);
+
+        $accessToken = $oauth2->fetchAuthToken()['access_token'];
+
+        // ✅ Corps du message
+        $payload = [
             'message' => [
                 'token' => $deviceToken,
                 'notification' => [
@@ -394,17 +388,19 @@ private function sendFcmNotification($deviceToken, $title, $body, $type = null)
         $response = Http::withHeaders([
             'Authorization' => 'Bearer ' . $accessToken,
             'Content-Type' => 'application/json',
-        ])->post($url, $data);
+        ])->post($url, $payload);
 
         if ($response->failed()) {
             Log::error('Erreur FCM: ' . $response->body());
+            return false;
         }
 
+        Log::info("✅ Notification FCM envoyée avec succès", ['to' => $deviceToken]);
         return $response->json();
 
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
         Log::error('Erreur lors de l’envoi FCM : ' . $e->getMessage());
-        throw $e;
+        return false;
     }
 }
 
@@ -514,42 +510,76 @@ private function sendFcmNotification($deviceToken, $title, $body, $type = null)
     }
 
 
-    public function send()
-    {
-        // 1️⃣ Récupération du chemin du fichier JSON et du projet
-        $path = base_path(env('GOOGLE_APPLICATION_CREDENTIALS'));
-        $projectId = env('FCM_PROJECT_ID');
 
-        // 2️⃣ Génération du token OAuth2
-        $scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
-        $credentials = new ServiceAccountCredentials($scopes, $path);
-        $token = $credentials->fetchAuthToken();
-        $accessToken = $token['access_token'];
+public function send()
+{
+    // 1️⃣ Lecture du compte de service
+    $serviceAccountPath = base_path(env('GOOGLE_APPLICATION_CREDENTIALS'));
+    $projectId = env('FCM_PROJECT_ID');
+    $serviceAccount = json_decode(file_get_contents($serviceAccountPath), true);
 
-        // 3️⃣ Données du message
-        $deviceToken = "czOL4lcZVLveRy80rdEMto:APA91bGl0hSlk0BUjWKkJ8mSZQW0KstXKobyE2zrcjMcR1MVJEk7mLnbp0_GtnGKAzL9OwAKnwHMqtH4dHzJobsoL1l9j8uAOCj2wfQLYHJ72wWiA0XzT1k";
+    // ✅ Correction des retours à la ligne dans la clé privée
+    $privateKey = str_replace("\\n", "\n", $serviceAccount['private_key']);
+    $clientEmail = $serviceAccount['client_email'];
 
-        $message = [
-            "message" => [
-                "token" => $deviceToken,
-                "notification" => [
-                    "title" => "Test Laravel FCM",
-                    "body"  => "Message envoyé via Firebase HTTP v1 🎯"
-                ]
-            ]
-        ];
+    // 2️⃣ Création du JWT manuellement
+    $now = time();
+    $header = ['alg' => 'RS256', 'typ' => 'JWT'];
+    $claimSet = [
+        'iss' => $clientEmail,
+        'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
+        'aud' => 'https://oauth2.googleapis.com/token',
+        'exp' => $now + 3600,
+        'iat' => $now,
+    ];
 
-        // 4️⃣ Envoi à Firebase
-        $response = Http::withHeaders([
-            'Authorization' => 'Bearer ' . $accessToken,
-            'Content-Type' => 'application/json',
-        ])->post("https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send", $message);
+    $base64UrlHeader = rtrim(strtr(base64_encode(json_encode($header)), '+/', '-_'), '=');
+    $base64UrlClaimSet = rtrim(strtr(base64_encode(json_encode($claimSet)), '+/', '-_'), '=');
 
-        // 5️⃣ Retour du résultat
+    $signatureInput = $base64UrlHeader . '.' . $base64UrlClaimSet;
+    openssl_sign($signatureInput, $signature, $privateKey, 'SHA256');
+    $base64UrlSignature = rtrim(strtr(base64_encode($signature), '+/', '-_'), '=');
+
+    $jwt = $signatureInput . '.' . $base64UrlSignature;
+
+    // 3️⃣ Échange du JWT contre un token d’accès OAuth2
+    $tokenResponse = Http::asForm()->post('https://oauth2.googleapis.com/token', [
+        'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        'assertion' => $jwt,
+    ]);
+
+    if ($tokenResponse->failed()) {
         return response()->json([
-            'status' => $response->status(),
-            'body' => $response->json(),
-        ]);
+            'error' => 'OAuth token generation failed',
+            'details' => $tokenResponse->json(),
+        ], 500);
     }
+
+    $accessToken = $tokenResponse->json()['access_token'];
+
+    // 4️⃣ Envoi du message FCM
+    $deviceToken = "fr3MthylLFWyFjsvFRXCll:APA91bFeiByioSFfffM1QT-wp1yUxl7oUzFNxMl1TH3FND0IFpkKuyVxwXPJQe5Xuv5IXfvr8yVJXyYmKYsOcOt8Aoyf75FZImNa_Eje2FsokDjBV5wQvn4";
+
+    $message = [
+        'message' => [
+            'token' => $deviceToken,
+            'notification' => [
+                'title' => 'Test Laravel FCM',
+                'body' => 'Message envoyé via Firebase HTTP v1 🎯',
+            ],
+        ],
+    ];
+
+    $fcmResponse = Http::withHeaders([
+        'Authorization' => 'Bearer ' . $accessToken,
+        'Content-Type' => 'application/json',
+    ])->post("https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send", $message);
+
+    return response()->json([
+        'status' => $fcmResponse->status(),
+        'fcm_body' => $fcmResponse->json(),
+    ]);
+}
+
 
 }
