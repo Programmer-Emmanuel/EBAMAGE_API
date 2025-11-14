@@ -130,7 +130,7 @@ class CommandeController extends Controller
         $prix = Prix::where('id', 1)->first();
         $seuil = Seuil::where('id', 1)->first();
         $livraison = $prix->prix;
-        if($prix_total_articles==$seuil->seuil){
+        if($prix_total_articles>=$seuil->seuil){
             $livraison = 0;
         }
 
@@ -1373,7 +1373,6 @@ public function reclammer_du(Request $request)
         $deja_cree = Portefeuille::where('id_commande', $commande->id)
             ->where('role', 'boutique')
             ->exists();
-
         if ($deja_cree) {
             DB::rollBack();
             return response()->json([
@@ -1393,7 +1392,8 @@ public function reclammer_du(Request $request)
         ]);
 
         // 🟩 Marquer la commande comme réclamée
-        $commande->update(['is_claimed' => true]);
+        $commande->is_claimed = true;
+        $commande->save();
 
         DB::commit();
 
