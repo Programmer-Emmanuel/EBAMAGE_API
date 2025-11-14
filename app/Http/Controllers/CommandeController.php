@@ -1366,7 +1366,7 @@ public function reclammer_du(Request $request)
         });
 
         // 90% pour la boutique
-        $montant_boutique = $commande->prix_total * 0.9;
+        $montant_boutique = $total_articles * 0.9;
 
 
         // 🔍 Vérifier si un portefeuille existe déjà
