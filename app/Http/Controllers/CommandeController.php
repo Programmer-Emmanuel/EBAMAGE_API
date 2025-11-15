@@ -1502,6 +1502,7 @@ public function afficher_portefeuille(Request $request)
                 'hashid'          => Hashids::encode($item->id),
                 'code_commande'   => $commande?->code_commande,
                 'nom_boutique'    => $commande?->boutique?->nom_btq,
+                'tel_boutique'    => $commande?->boutique?->tel_btq,
                 'commande_statut' => $commande?->statut,
                 'montant'         => $item->montant,
                 'statut'          => $item->statut,
