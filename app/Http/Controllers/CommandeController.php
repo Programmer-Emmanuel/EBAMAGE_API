@@ -727,7 +727,7 @@ private function sendPushNotification($deviceToken, $title, $body, $type = null)
             $response = Http::withHeaders([
                 'Content-Type' => 'application/json',
                 'Accept' => 'application/json',
-            ])->post('https://exp.host/--/api/v2/push/send', $data);
+            ])->post('https://api.expo.dev/v2/push/send', $data);
 
             if ($response->failed()) {
                 Log::error('❌ Erreur Expo: ' . $response->body());

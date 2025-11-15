@@ -345,10 +345,55 @@ class NotificationController extends Controller
     // ----------------------------
 private function sendFcmNotification($deviceToken, $title, $body, $type = null)
 {
+    if (empty($deviceToken)) {
+        Log::warning("⚠️ Aucun device token fourni pour la notification.");
+        return ['success' => false, 'error' => 'Token vide'];
+    }
+
+    // ✅ Cas 1 : Token Expo (React Native)
+    if (str_starts_with($deviceToken, 'ExponentPushToken')) {
+        try {
+            $data = [
+                'to' => $deviceToken,
+                'sound' => 'default',
+                'title' => $title,
+                'body' => $body,
+                'data' => [
+                    'type' => $type ?? 'default',
+                ],
+            ];
+
+            $response = Http::withHeaders([
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+            ])->timeout(10)->post('https://api.expo.dev/v2/push/send', $data);
+
+            if ($response->failed()) {
+                Log::error('❌ Erreur Expo: ' . $response->body());
+                return ['success' => false, 'error' => 'Erreur HTTP Expo: ' . $response->status()];
+            }
+
+            $res = $response->json();
+            if (isset($res['data'][0]['status']) && $res['data'][0]['status'] === 'ok') {
+                Log::info("✅ Notification Expo envoyée avec succès", ['to' => $deviceToken]);
+                return ['success' => true];
+            }
+
+            $error = $res['data'][0]['message'] ?? 'Erreur inconnue Expo';
+            Log::error("❌ Erreur Expo: $error", ['response' => $res]);
+            return ['success' => false, 'error' => $error];
+
+        } catch (\Throwable $e) {
+            Log::error('Erreur lors de l\'envoi via Expo : ' . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    // ✅ Cas 2 : Token FCM (Firebase)
     $projectId = env('FCM_PROJECT_ID');
     
     try {
-        // ✅ OPTION 1: Utilisation des variables d'environnement (Recommandé pour Render)
+        // ✅ OPTION 1: Utilisation des variables d'environnement
         $jsonKey = [
             'type' => env('FIREBASE_TYPE'),
             'project_id' => env('FIREBASE_PROJECT_ID'),
@@ -363,6 +408,12 @@ private function sendFcmNotification($deviceToken, $title, $body, $type = null)
             'universe_domain' => env('FIREBASE_UNIVERSE_DOMAIN')
         ];
 
+        // Vérifier que toutes les variables nécessaires sont présentes
+        if (empty($jsonKey['private_key']) || empty($jsonKey['client_email'])) {
+            Log::error('❌ Configuration Firebase manquante');
+            return ['success' => false, 'error' => 'Configuration Firebase manquante'];
+        }
+
         $privateKey = $jsonKey['private_key'];
 
         $oauth2 = new OAuth2([
@@ -376,7 +427,7 @@ private function sendFcmNotification($deviceToken, $title, $body, $type = null)
 
         $accessToken = $oauth2->fetchAuthToken()['access_token'];
 
-        // ✅ Corps du message
+        // ✅ Corps du message FCM
         $payload = [
             'message' => [
                 'token' => $deviceToken,
@@ -398,124 +449,310 @@ private function sendFcmNotification($deviceToken, $title, $body, $type = null)
         ])->post($url, $payload);
 
         if ($response->failed()) {
-            Log::error('Erreur FCM: ' . $response->body());
-            return false;
+            Log::error('❌ Erreur FCM: ' . $response->body());
+            return ['success' => false, 'error' => 'Erreur FCM: ' . $response->status()];
         }
 
         Log::info("✅ Notification FCM envoyée avec succès", ['to' => $deviceToken]);
-        return $response->json();
+        return ['success' => true, 'response' => $response];
 
     } catch (\Throwable $e) {
-        Log::error('Erreur lors de l\'envoi FCM : ' . $e->getMessage());
-        return false;
+        Log::error('❌ Erreur lors de l\'envoi FCM : ' . $e->getMessage());
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+// ----------------------------
+// 7. Envoyer une notification à tous les clients
+// ----------------------------
+
+
+// ----------------------------
+// 8. Envoyer une notification à toutes les boutiques
+// ----------------------------
+public function notification_toutes_boutiques(Request $request)
+{
+    $request->validate([
+        'title' => 'required|string',
+        'message' => 'required|string',            
+        'type' => 'nullable|string',
+    ]);
+
+    $boutiques = Boutique::whereNotNull('device_token')->get();
+    $successCount = 0;
+    $errorCount = 0;
+    $errors = [];
+
+    foreach ($boutiques as $btq) {
+        $result = $this->sendFcmNotification($btq->device_token, $request->title, $request->message, $request->type);
+        
+        if ($result['success']) {
+            $successCount++;
+            // ✅ Créer la notification seulement si l'envoi a réussi
+            Notification::create([
+                'boutique_id' => $btq->id,
+                'device_token' => $btq->device_token,
+                'title' => $request->title,
+                'message' => $request->message,
+                'type' => $request->type,
+            ]);
+        } else {
+            $errorCount++;
+            $errors[] = [
+                'boutique_id' => $btq->id,
+                'device_token' => $btq->device_token,
+                'error' => $result['error']
+            ];
+            Log::error("❌ Échec envoi à la boutique {$btq->id}: {$result['error']}");
+        }
+    }
+
+    return response()->json([
+        'success' => true,
+        'message' => "Notification envoyée à toutes les boutiques - Succès: {$successCount}, Échecs: {$errorCount}",
+        'stats' => [
+            'total' => $boutiques->count(),
+            'success' => $successCount,
+            'errors' => $errorCount
+        ],
+        'errors' => $errors
+    ]);
+}
+
+// ----------------------------
+// 0. Envoyer une notification à tout le monde (clients + boutiques)
+// ----------------------------
+
+public function notification_tous_clients(Request $request)
+{
+    $request->validate([
+        'title' => 'required|string',
+        'message' => 'required|string',
+        'type' => 'nullable|string',
+    ]);
+
+    try {
+        $clients = User::whereNotNull('device_token')->get();
+        
+        if ($clients->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Aucun client avec device token trouvé'
+            ], 404);
+        }
+
+        $successCount = 0;
+        $errorCount = 0;
+        $errors = [];
+
+        foreach ($clients as $client) {
+            try {
+                $result = $this->sendFcmNotification(
+                    $client->device_token, 
+                    $request->title, 
+                    $request->message, 
+                    $request->type
+                );
+                
+                // ✅ Vérification robuste pour Expo et FCM
+                if (is_array($result) && isset($result['success']) && $result['success'] === true) {
+                    $successCount++;
+                    
+                    // Créer la notification seulement si l'envoi a réussi
+                    Notification::create([
+                        'user_id' => $client->id,
+                        'device_token' => $client->device_token,
+                        'title' => $request->title,
+                        'message' => $request->message,
+                        'type' => $request->type ?? 'default',
+                    ]);
+                    
+                    Log::info("✅ Notification envoyée au client", [
+                        'client_id' => $client->id,
+                        'token_type' => str_starts_with($client->device_token, 'ExponentPushToken') ? 'Expo' : 'FCM'
+                    ]);
+                } else {
+                    $errorCount++;
+                    $errorMessage = $result['error'] ?? 'Erreur inconnue';
+                    $errors[] = [
+                        'user_id' => $client->id,
+                        'device_token' => $this->maskToken($client->device_token),
+                        'error' => $errorMessage
+                    ];
+                    Log::warning("❌ Échec envoi au client {$client->id}", [
+                        'error' => $errorMessage,
+                        'token_type' => str_starts_with($client->device_token, 'ExponentPushToken') ? 'Expo' : 'FCM'
+                    ]);
+                }
+            } catch (\Exception $e) {
+                $errorCount++;
+                $errorMsg = 'Exception: ' . $e->getMessage();
+                $errors[] = [
+                    'user_id' => $client->id,
+                    'device_token' => $this->maskToken($client->device_token),
+                    'error' => $errorMsg
+                ];
+                Log::error("❌ Exception lors de l'envoi au client {$client->id}: {$errorMsg}");
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Notification envoyée à tous les clients - Succès: {$successCount}, Échecs: {$errorCount}",
+            'stats' => [
+                'total' => $clients->count(),
+                'success' => $successCount,
+                'errors' => $errorCount
+            ],
+            'errors' => $errorCount > 0 ? $errors : null
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error("❌ Erreur générale notification_tous_clients: " . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de l\'envoi des notifications: ' . $e->getMessage()
+        ], 500);
     }
 }
 
+public function notification_tout_le_monde(Request $request)
+{
+    $request->validate([
+        'title' => 'required|string',
+        'message' => 'required|string',
+        'type' => 'required|string',
+    ]);
 
-    // ----------------------------
-    // 7. Envoyer une notification à tous les clients
-    // ----------------------------
-    public function notification_tous_clients(Request $request)
-    {
-        $request->validate([
-            'title' => 'required|string',
-            'message' => 'required|string',
-            'type' => 'nullable|string',
-        ]);
-
-        $clients = User::whereNotNull('device_token')->get();
-        foreach ($clients as $client) {
-            $this->sendFcmNotification($client->device_token, $request->title, $request->message, $request->type);
-
-            Notification::create([
-                'user_id' => $client->id,
-                'device_token' => $client->device_token,
-                'title' => $request->title,
-                'message' => $request->message,
-                'type' => $request->type,
-            ]);
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Notification envoyée à tous les clients'
-        ]);
-    }
-
-    // ----------------------------
-    // 8. Envoyer une notification à toutes les boutiques
-    // ----------------------------
-    public function notification_toutes_boutiques(Request $request)
-    {
-        $request->validate([
-            'title' => 'required|string',
-            'message' => 'required|string',            
-            'type' => 'nullable|string',
-        ]);
-
-        $boutiques = Boutique::whereNotNull('device_token')->get();
-        foreach ($boutiques as $btq) {
-            $this->sendFcmNotification($btq->device_token, $request->title, $request->message, $request->type);
-
-            Notification::create([
-                'boutique_id' => $btq->id,
-                'device_token' => $btq->device_token,
-                'title' => $request->title,
-                'message' => $request->message,
-                'type' => $request->type,
-            ]);
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Notification envoyée à toutes les boutiques'
-        ]);
-    }
-
-    // ----------------------------
-    // 0. Envoyer une notification à tout le monde (clients + boutiques)
-    // ----------------------------
-    public function notification_tout_le_monde(Request $request)
-    {
-        $request->validate([
-            'title' => 'required|string',
-            'message' => 'required|string',
-            'type' => 'required|string',
-        ]);
-
+    try {
         $clients = User::whereNotNull('device_token')->get();
         $boutiques = Boutique::whereNotNull('device_token')->get();
-
-        foreach ($clients as $client) {
-            $this->sendFcmNotification($client->device_token, $request->title, $request->message, $request->type);
-
-            Notification::create([
-                'user_id' => $client->id,
-                'device_token' => $client->device_token,
-                'title' => $request->title,
-                'message' => $request->message,
-                'type' => $request->type,
-            ]);
+        
+        $totalDevices = $clients->count() + $boutiques->count();
+        
+        if ($totalDevices === 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Aucun device token trouvé (clients ou boutiques)'
+            ], 404);
         }
 
-        foreach ($boutiques as $btq) {
-            $this->sendFcmNotification($btq->device_token, $request->title, $request->message, $request->type);
+        $successCount = 0;
+        $errorCount = 0;
+        $errors = [];
 
-            Notification::create([
-                'boutique_id' => $btq->id,
-                'device_token' => $btq->device_token,
-                'title' => $request->title,
-                'message' => $request->message,
-                'type' => $request->type,
-            ]);
+        // Traitement des clients
+        foreach ($clients as $client) {
+            try {
+                $result = $this->sendFcmNotification(
+                    $client->device_token, 
+                    $request->title, 
+                    $request->message, 
+                    $request->type
+                );
+                
+                if (is_array($result) && isset($result['success']) && $result['success'] === true) {
+                    $successCount++;
+                    Notification::create([
+                        'user_id' => $client->id,
+                        'device_token' => $client->device_token,
+                        'title' => $request->title,
+                        'message' => $request->message,
+                        'type' => $request->type,
+                    ]);
+                } else {
+                    $errorCount++;
+                    $errors[] = [
+                        'type' => 'client',
+                        'id' => $client->id,
+                        'device_token' => $this->maskToken($client->device_token),
+                        'error' => $result['error'] ?? 'Erreur inconnue'
+                    ];
+                }
+            } catch (\Exception $e) {
+                $errorCount++;
+                $errors[] = [
+                    'type' => 'client',
+                    'id' => $client->id,
+                    'device_token' => $this->maskToken($client->device_token),
+                    'error' => 'Exception: ' . $e->getMessage()
+                ];
+            }
+        }
+
+        // Traitement des boutiques
+        foreach ($boutiques as $btq) {
+            try {
+                $result = $this->sendFcmNotification(
+                    $btq->device_token, 
+                    $request->title, 
+                    $request->message, 
+                    $request->type
+                );
+                
+                if (is_array($result) && isset($result['success']) && $result['success'] === true) {
+                    $successCount++;
+                    Notification::create([
+                        'boutique_id' => $btq->id,
+                        'device_token' => $btq->device_token,
+                        'title' => $request->title,
+                        'message' => $request->message,
+                        'type' => $request->type,
+                    ]);
+                } else {
+                    $errorCount++;
+                    $errors[] = [
+                        'type' => 'boutique',
+                        'id' => $btq->id,
+                        'device_token' => $this->maskToken($btq->device_token),
+                        'error' => $result['error'] ?? 'Erreur inconnue'
+                    ];
+                }
+            } catch (\Exception $e) {
+                $errorCount++;
+                $errors[] = [
+                    'type' => 'boutique',
+                    'id' => $btq->id,
+                    'device_token' => $this->maskToken($btq->device_token),
+                    'error' => 'Exception: ' . $e->getMessage()
+                ];
+            }
         }
 
         return response()->json([
             'success' => true,
-            'message' => 'Notification envoyée à tous les clients et boutiques'
+            'message' => "Notification envoyée à tous les clients et boutiques - Succès: {$successCount}, Échecs: {$errorCount}",
+            'stats' => [
+                'total' => $totalDevices,
+                'clients' => $clients->count(),
+                'boutiques' => $boutiques->count(),
+                'success' => $successCount,
+                'errors' => $errorCount
+            ],
+            'errors' => $errorCount > 0 ? $errors : null
         ]);
-    }
 
+    } catch (\Exception $e) {
+        Log::error("❌ Erreur générale notification_tout_le_monde: " . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de l\'envoi des notifications: ' . $e->getMessage()
+        ], 500);
+    }
+}
+
+// ✅ Méthode utilitaire pour masquer les tokens dans les logs
+private function maskToken($token)
+{
+    if (empty($token)) {
+        return 'empty';
+    }
+    
+    if (strlen($token) <= 20) {
+        return substr($token, 0, 10) . '...';
+    }
+    
+    return substr($token, 0, 10) . '...' . substr($token, -10);
+}
 
 
 public function send()
