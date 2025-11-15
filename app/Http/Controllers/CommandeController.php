@@ -372,22 +372,40 @@ public function rechercherCommande(Request $request)
     return $response;
 }
 
-public function edit_statut_livree($hashid) 
+public function edit_statut_livree($hashid)
 {
+    $commandeId = Hashids::decode($hashid)[0] ?? null;
+
+    if (!$commandeId) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Identifiant invalide.',
+        ], 400);
+    }
+
+    $commande = Commande::where('id', $commandeId)
+        ->with(['client', 'boutique'])
+        ->first();
+
+    if (!$commande) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Commande introuvable.'
+        ], 404);
+    }
+
+    // 🚫 Vérifier si déjà livrée
+    if ($commande->statut_commande === 'Livrée') {
+        return response()->json([
+            'success' => false,
+            'message' => 'Cette commande est déjà marquée comme livrée.'
+        ], 409);
+    }
+
+    // 🟩 Mise à jour du statut
     $response = $this->updateStatutCommande($hashid, 'Livrée');
 
     if (($response->getData()->success ?? false) === true) {
-
-        $commande = Commande::where('id', Hashids::decode($hashid)[0] ?? null)
-            ->with(['client', 'boutique'])
-            ->first();
-
-        if (!$commande) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Commande introuvable.'
-            ], 404);
-        }
 
         // 🟧 Total des articles (100% ira à l'admin)
         $articles = json_decode($commande->articles, true);
@@ -395,24 +413,20 @@ public function edit_statut_livree($hashid)
             fn($article) => $article['prix'] * $article['quantite']
         );
 
-        // 🟨 Toutes les recettes vont à l’admin (100%)
+        // 🟨 Ajouter au solde admin
         $admin = Admin::where('role', 'super_admin')->first();
         if ($admin) {
             $admin->solde_admin += $total_commande;
             $admin->save();
         }
 
-        // 🟦 Mettre à jour le portefeuille du livreur
-        $portefeuilleLivreur = Portefeuille::where('id_commande', $commande->id)
+        // 🟦 Mettre à jour portefeuille livreur
+        Portefeuille::where('id_commande', $commandeId)
             ->where('role', 'livreur')
-            ->first();
-
-        if ($portefeuilleLivreur) {
-            $portefeuilleLivreur->update([
+            ->update([
                 'statut' => 'Payé',
-                'is_paid' => 1
+                'is_paid' => 1,
             ]);
-        }
 
         return response()->json([
             'success' => true,
@@ -422,6 +436,7 @@ public function edit_statut_livree($hashid)
 
     return $response;
 }
+
 
 
 
