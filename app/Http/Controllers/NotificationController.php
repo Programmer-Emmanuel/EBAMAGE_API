@@ -346,17 +346,24 @@ class NotificationController extends Controller
 private function sendFcmNotification($deviceToken, $title, $body, $type = null)
 {
     $projectId = env('FCM_PROJECT_ID');
-    $credentialsPath = base_path(env('GOOGLE_APPLICATION_CREDENTIALS'));
-
-    if (!file_exists($credentialsPath)) {
-        Log::error("Fichier de compte de service introuvable : {$credentialsPath}");
-        return false;
-    }
-
+    
     try {
-        // ✅ Génération du token d’accès avec OAuth2 (méthode moderne)
-        $jsonKey = json_decode(file_get_contents($credentialsPath), true);
-        $privateKey = str_replace("\\n", "\n", $jsonKey['private_key']);
+        // ✅ OPTION 1: Utilisation des variables d'environnement (Recommandé pour Render)
+        $jsonKey = [
+            'type' => env('FIREBASE_TYPE'),
+            'project_id' => env('FIREBASE_PROJECT_ID'),
+            'private_key_id' => env('FIREBASE_PRIVATE_KEY_ID'),
+            'private_key' => str_replace("\\n", "\n", env('FIREBASE_PRIVATE_KEY')),
+            'client_email' => env('FIREBASE_CLIENT_EMAIL'),
+            'client_id' => env('FIREBASE_CLIENT_ID'),
+            'auth_uri' => env('FIREBASE_AUTH_URI'),
+            'token_uri' => env('FIREBASE_TOKEN_URI'),
+            'auth_provider_x509_cert_url' => env('FIREBASE_AUTH_PROVIDER_X509_CERT_URL'),
+            'client_x509_cert_url' => env('FIREBASE_CLIENT_X509_CERT_URL'),
+            'universe_domain' => env('FIREBASE_UNIVERSE_DOMAIN')
+        ];
+
+        $privateKey = $jsonKey['private_key'];
 
         $oauth2 = new OAuth2([
             'audience' => 'https://oauth2.googleapis.com/token',
@@ -399,7 +406,7 @@ private function sendFcmNotification($deviceToken, $title, $body, $type = null)
         return $response->json();
 
     } catch (\Throwable $e) {
-        Log::error('Erreur lors de l’envoi FCM : ' . $e->getMessage());
+        Log::error('Erreur lors de l\'envoi FCM : ' . $e->getMessage());
         return false;
     }
 }

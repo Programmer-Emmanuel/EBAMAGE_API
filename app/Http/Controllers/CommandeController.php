@@ -704,7 +704,6 @@ public function edit_statut_sous_commande(Request $request, $hashid_commande, $h
     }
 
 
-
 private function sendPushNotification($deviceToken, $title, $body, $type = null)
 {
     if (empty($deviceToken)) {
@@ -746,7 +745,7 @@ private function sendPushNotification($deviceToken, $title, $body, $type = null)
             return false;
 
         } catch (\Throwable $e) {
-            Log::error('Erreur lors de l’envoi via Expo : ' . $e->getMessage());
+            Log::error('Erreur lors de l\'envoi via Expo : ' . $e->getMessage());
             return false;
         }
     }
@@ -754,15 +753,43 @@ private function sendPushNotification($deviceToken, $title, $body, $type = null)
     // ✅ Cas 2 : Firebase FCM HTTP v1
     try {
         $projectId = env('FCM_PROJECT_ID');
-        $credentialsPath = base_path(env('GOOGLE_APPLICATION_CREDENTIALS'));
+        
+        // Vérifier si on utilise les variables d'environnement ou le fichier JSON
+        if (env('FIREBASE_PRIVATE_KEY')) {
+            // ✅ Utilisation des variables d'environnement (Recommandé pour Render)
+            $jsonKey = [
+                'type' => env('FIREBASE_TYPE'),
+                'project_id' => env('FIREBASE_PROJECT_ID'),
+                'private_key_id' => env('FIREBASE_PRIVATE_KEY_ID'),
+                'private_key' => str_replace("\\n", "\n", env('FIREBASE_PRIVATE_KEY')),
+                'client_email' => env('FIREBASE_CLIENT_EMAIL'),
+                'client_id' => env('FIREBASE_CLIENT_ID'),
+                'auth_uri' => env('FIREBASE_AUTH_URI'),
+                'token_uri' => env('FIREBASE_TOKEN_URI'),
+                'auth_provider_x509_cert_url' => env('FIREBASE_AUTH_PROVIDER_X509_CERT_URL'),
+                'client_x509_cert_url' => env('FIREBASE_CLIENT_X509_CERT_URL'),
+                'universe_domain' => env('FIREBASE_UNIVERSE_DOMAIN')
+            ];
+            
+            Log::info("🔧 Utilisation des variables d'environnement Firebase");
+        } else {
+            // ✅ Fallback sur le fichier JSON
+            $credentialsPath = base_path(env('GOOGLE_APPLICATION_CREDENTIALS'));
+            if (!file_exists($credentialsPath)) {
+                Log::error("❌ Fichier de compte de service introuvable : {$credentialsPath}");
+                return false;
+            }
+            $jsonKey = json_decode(file_get_contents($credentialsPath), true);
+            Log::info("🔧 Utilisation du fichier JSON Firebase");
+        }
 
-        if (!file_exists($credentialsPath)) {
-            Log::error("❌ Fichier de compte de service introuvable : {$credentialsPath}");
+        // Vérification des champs requis
+        if (empty($jsonKey['private_key']) || empty($jsonKey['client_email'])) {
+            Log::error('❌ Clé privée ou email client manquant dans la configuration Firebase');
             return false;
         }
 
-        // Nouvelle méthode d'authentification OAuth2 (plus stable que ServiceAccountCredentials)
-        $jsonKey = json_decode(file_get_contents($credentialsPath), true);
+        // Nouvelle méthode d'authentification OAuth2
         $oauth2 = new OAuth2([
             'audience' => 'https://oauth2.googleapis.com/token',
             'issuer' => $jsonKey['client_email'],
@@ -772,7 +799,9 @@ private function sendPushNotification($deviceToken, $title, $body, $type = null)
             'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
         ]);
 
-        $accessToken = $oauth2->fetchAuthToken()['access_token'] ?? null;
+        $authToken = $oauth2->fetchAuthToken();
+        $accessToken = $authToken['access_token'] ?? null;
+        
         if (!$accessToken) {
             Log::error("❌ Impossible de générer un token OAuth2 pour FCM.");
             return false;
@@ -788,6 +817,14 @@ private function sendPushNotification($deviceToken, $title, $body, $type = null)
                 'data' => [
                     'type' => $type ?? 'default',
                 ],
+                'android' => [
+                    'priority' => 'high'
+                ],
+                'apns' => [
+                    'headers' => [
+                        'apns-priority' => '10'
+                    ]
+                ]
             ],
         ];
 
@@ -796,18 +833,27 @@ private function sendPushNotification($deviceToken, $title, $body, $type = null)
         $response = Http::withHeaders([
             'Authorization' => 'Bearer ' . $accessToken,
             'Content-Type' => 'application/json',
-        ])->post($url, $payload);
+        ])->timeout(30)->post($url, $payload);
 
         if ($response->failed()) {
             Log::error('❌ Erreur FCM: ' . $response->body());
             return false;
         }
 
-        Log::info("✅ Notification FCM envoyée avec succès", ['to' => $deviceToken]);
+        $responseData = $response->json();
+        if (isset($responseData['name'])) {
+            Log::info("✅ Notification FCM envoyée avec succès", [
+                'to' => $deviceToken,
+                'message_id' => $responseData['name']
+            ]);
+        } else {
+            Log::info("✅ Notification FCM envoyée avec succès", ['to' => $deviceToken]);
+        }
+        
         return true;
 
     } catch (\Throwable $e) {
-        Log::error('Erreur lors de l’envoi FCM : ' . $e->getMessage());
+        Log::error('Erreur lors de l\'envoi FCM : ' . $e->getMessage());
         return false;
     }
 }
@@ -820,23 +866,37 @@ private function saveAndSendNotification($data, $deviceToken = null)
     try {
         // 🔔 Envoi de la notification (Expo ou FCM)
         if (!empty($deviceToken)) {
-            $this->sendPushNotification(
+            $sendResult = $this->sendPushNotification(
                 $deviceToken,
                 $data['title'],
                 $data['message'],
                 $data['type'] ?? 'general'
             );
+            
+            if (!$sendResult) {
+                Log::warning("⚠️ Échec de l'envoi de notification push", [
+                    'device_token' => substr($deviceToken, 0, 20) . '...',
+                    'title' => $data['title']
+                ]);
+            }
+        } else {
+            Log::info("ℹ️ Aucun device token, notification sauvegardée uniquement en BDD");
         }
 
         // 💾 Sauvegarde en BDD
         NotificationModel::create($data);
-        Log::info("✅ Notification enregistrée en BDD", $data);
+        Log::info("✅ Notification enregistrée en BDD", [
+            'title' => $data['title'],
+            'type' => $data['type'] ?? 'general'
+        ]);
 
         return true;
     } catch (\Throwable $e) {
         Log::error("Erreur enregistrement/envoi notification : " . $e->getMessage(), [
-            'trace' => $e->getTraceAsString(),
-            'data' => $data,
+            'data' => [
+                'title' => $data['title'] ?? 'N/A',
+                'type' => $data['type'] ?? 'N/A'
+            ],
         ]);
         return false;
     }
@@ -858,6 +918,8 @@ private function sendNotificationToBoutique($boutique, $title, $message, $type =
         'title' => $title,
         'message' => $message,
         'type' => $type ?? 'general',
+        'created_at' => now(),
+        'updated_at' => now(),
     ];
 
     return $this->saveAndSendNotification($data, $boutique->device_token ?? null);
@@ -879,6 +941,8 @@ private function sendNotificationToClient($client, $title, $message, $type = nul
         'title' => $title,
         'message' => $message,
         'type' => $type ?? 'general',
+        'created_at' => now(),
+        'updated_at' => now(),
     ];
 
     return $this->saveAndSendNotification($data, $client->device_token ?? null);
@@ -945,7 +1009,7 @@ private function sendStatusNotification($commande, $nouveauStatut, $ancienStatut
                 $this->sendNotificationToClient(
                     $client,
                     "Commande Annulée ❌",
-                    "Votre commande $commandeCode a été annulée. Si c’est une erreur, contactez la boutique.",
+                    "Votre commande $commandeCode a été annulée. Si c'est une erreur, contactez la boutique.",
                     'commande_annulee'
                 );
             }
