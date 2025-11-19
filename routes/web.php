@@ -288,7 +288,6 @@ Route::get('/test-mail', function() {
     Route::get('/transactions/admin/recues', [PaiementController::class, 'transactions_recues_admin']);
     
     Route::get('afficher/seuil', [PrixController::class, 'afficher_seuil']);
-    Route::get('afficher/prix', [PrixController::class, 'afficher_prix']);
     Route::post('update/prix', [PrixController::class, 'update_prix']);
     Route::post('update/seuil', [PrixController::class, 'update_seuil']);
 
@@ -305,5 +304,6 @@ Route::get('/test-mail', function() {
      });
 
      Route::get('/test-fcm', [NotificationController::class, 'send']);
+         Route::get('afficher/prix', [PrixController::class, 'afficher_prix']);
 
 });

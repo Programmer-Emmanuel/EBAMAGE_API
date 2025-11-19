@@ -40,14 +40,23 @@ class PrixController extends Controller
             ],500);
         }
     }
-    public function afficher_prix(){
+    public function afficher_prix(Request $request){
         try{
+            
            $prix = Prix::where('id', 1)->first();
            if(!$prix){
             return response()->json([
                 'success' => false,
                 'message' => 'Il n’y a aucun prix qui a été fixé.'
             ],404);
+           }
+           $seuil = Seuil::where('id', 1)->first();
+           if($request->cout >= $seuil->seuil){
+            return response()->json([
+            'success' => true,
+            'data' => 0,
+            'message' => 'Prix de livraison affiché avec succès'
+           ],200);
            }
            return response()->json([
             'success' => true,

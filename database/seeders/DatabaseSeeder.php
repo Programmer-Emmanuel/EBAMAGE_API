@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Admin;
 use App\Models\Prix;
 use App\Models\Seuil;
+use App\Models\Variation;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -169,6 +170,12 @@ class DatabaseSeeder extends Seeder
         $seuil->seuil = 50000;
         $seuil->save();
 
+        $variation = new Variation();
+        $variation->nom_variation = 'color';
+        $variation->lib_variation = []; // vide au départ
+        $variation->id_btq = null;
+        $variation->save();
+
         // -------------------------
         // 9. Affichage console
         // -------------------------
@@ -183,5 +190,6 @@ class DatabaseSeeder extends Seeder
         $this->command->info("   - Administrateur créé!");
         $this->command->info("   - Prix de livraison créé!");
         $this->command->info("   - Seuil de prix livraison gratuite créé!");
+        $this->command->info("   - Variation color créée!");
     }
 }

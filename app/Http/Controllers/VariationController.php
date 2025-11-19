@@ -14,10 +14,9 @@ class VariationController extends Controller
     public function ajout_variation(Request $request){
         try {
             $validated = $request->validate([
-                'nom_variation' => 'required|string|in:taille,color,matiere,longueur',
+                'nom_variation' => 'required|string',
             ], [
                 'nom_variation.required' => 'Le nom de la variation est obligatoire.',
-                'nom_variation.in' => 'Le nom de la variation doit être "taille", "color", "matiere" ou "longueur".',
             ]);
 
             $variation = new Variation();
@@ -295,14 +294,20 @@ public function variation($hashid)
 
         // Validation conditionnelle
         $validated = $request->validate([
-            'nom_variation' => 'nullable|string|in:taille,color,matiere,longueur',
+            'nom_variation' => 'nullable|string',
             'lib_variation' => 'nullable|array',
         ], [
-            'nom_variation.in' => 'Le nom de la variation doit être "taille", "color", "matiere" ou "longueur".',
             'lib_variation.array' => 'Les valeurs doivent être un tableau.',
         ]);
 
         try {
+            if($variation->nom_variation === 'color' && empty($variation->lib_variation)){
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vous ne devez pas modifié la variation color.'
+                ],403);
+            }
+
             if ($request->has('nom_variation')) {
                 $variation->nom_variation = $validated['nom_variation'];
             }
@@ -351,6 +356,13 @@ public function variation($hashid)
                 'success' => false,
                 'message' => 'Variation non trouvée ou non autorisé.'
             ]);
+        }
+
+        if($variation->nom_variation === 'color' && empty($variation->lib_variation)){
+            return response()->json([
+                'success' => false,
+                'message' => 'Vous ne devez pas supprimé la variation color.'
+            ],403);
         }
 
         $variation->delete();
