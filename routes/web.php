@@ -301,6 +301,7 @@ Route::get('/test-mail', function() {
      Route::middleware('auth:admin,boutique')->group(function(){
         
         Route::post('/variation/{hashid}/delete', [VariationController::class, 'delete_variation']);
+        Route::post('/update/variation/{hashid}', [VariationController::class, 'update_variation_admin']);
      });
 
      Route::get('/test-fcm', [NotificationController::class, 'send']);

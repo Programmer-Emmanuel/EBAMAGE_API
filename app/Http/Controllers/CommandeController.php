@@ -25,6 +25,7 @@ use App\Mail\CommandeLivreeMail;
 use App\Mail\CommandeAnnuleeMail;
 use App\Models\Admin;
 use App\Models\Portefeuille;
+use App\Models\Pourcentage;
 use App\Models\Prix;
 use App\Models\Seuil;
 use Carbon\Carbon;
@@ -1445,7 +1446,8 @@ public function reclammer_du(Request $request)
         });
 
         // 90% pour la boutique
-        $montant_boutique = $total_articles * 0.9;
+        $pourcentage = Pourcentage::where('id', 1)->first();
+        $montant_boutique = $total_articles * (( 100 - $pourcentage->pourcentage)/100);
 
 
         // 🔍 Vérifier si un portefeuille existe déjà
@@ -1624,10 +1626,10 @@ public function marquerCommePayee(Request $request, $hashid)
             fn($a) => $a['prix'] * $a['quantite']
         );
 
-        // 90% pour la boutique
-        $montant_boutique = $total * 0.90;
+        $pourcentage = Pourcentage::where('id', 1)->first();
+        
+        $montant_boutique = $total * (( 100 - $pourcentage->pourcentage)/100);
 
-        // 🟥 Retirer 90% du solde admin
         $realAdmin = Admin::where('role', 'super_admin')->first();
 
         if ($realAdmin) {

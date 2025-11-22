@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Admin;
+use App\Models\Pourcentage;
 use App\Models\Prix;
 use App\Models\Seuil;
 use App\Models\Variation;
@@ -169,6 +170,10 @@ class DatabaseSeeder extends Seeder
         $seuil = new Seuil();
         $seuil->seuil = 50000;
         $seuil->save();
+
+        $pourcentage = new Pourcentage();
+        $pourcentage->pourcentage = 10;
+        $pourcentage->save();
 
         $variation = new Variation();
         $variation->nom_variation = 'color';

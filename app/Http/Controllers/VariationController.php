@@ -55,6 +55,62 @@ class VariationController extends Controller
         }
     }
 
+    public function update_variation_admin(Request $request, $hashid)
+{
+    try {
+        $id = Hashids::decode($hashid)[0] ?? null;
+        // Vérifier si la variation existe
+        $variation = Variation::find($id);
+
+        if (!$variation) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Variation introuvable.'
+            ], 404);
+        }
+
+        // Validation
+        $validated = $request->validate([
+            'nom_variation' => 'required|string',
+        ], [
+            'nom_variation.required' => 'Le nom de la variation est obligatoire.',
+        ]);
+
+
+        // Mise à jour
+        $variation->nom_variation = $validated['nom_variation'];
+        $variation->save();
+
+        return response()->json([
+            'success' => true,
+            'data' => $variation,
+            'message' => 'Variation mise à jour avec succès.'
+        ], 200);
+
+    } catch (ValidationException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur de validation.',
+            'erreur' => $e->errors()
+        ], 422);
+
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la mise à jour en base de données.',
+            'erreur' => $e->getMessage()
+        ], 500);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur inattendue est survenue.',
+            'erreur' => $e->getMessage()
+        ], 500);
+    }
+}
+
+
      public function ajouterLibelles(Request $request)
     {
         $validator = Validator::make($request->all(), [
