@@ -8,6 +8,7 @@ use App\Http\Controllers\CommandeController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaiementController;
 use App\Http\Controllers\PanierController;
+use App\Http\Controllers\PourcentageController;
 use App\Http\Controllers\PrixController;
 use App\Http\Controllers\PubliciteController;
 use App\Http\Controllers\RechercheController;
@@ -296,12 +297,19 @@ Route::get('/test-mail', function() {
     //Afficher portefeuille
     Route::get('/afficher/portefeuille', [CommandeController::class, 'afficher_portefeuille']);
     Route::post('marquer/paye/{hashid}', [CommandeController::class, 'marquerCommePayee']);
+
+    
+        Route::post('/update/variation/{hashid}', [VariationController::class, 'update_variation_admin']);
+        
+
+        Route::get('/pourcentage', [PourcentageController::class, 'afficher_pourcentage']);
+        Route::post('/pourcentage/update', [PourcentageController::class, 'update_pourcentage']);
+    
      }));
 
      Route::middleware('auth:admin,boutique')->group(function(){
         
         Route::post('/variation/{hashid}/delete', [VariationController::class, 'delete_variation']);
-        Route::post('/update/variation/{hashid}', [VariationController::class, 'update_variation_admin']);
      });
 
      Route::get('/test-fcm', [NotificationController::class, 'send']);
