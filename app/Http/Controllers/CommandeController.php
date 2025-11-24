@@ -1315,7 +1315,7 @@ $portefeuille_livreur = Portefeuille::where('role', 'livreur')
     }
 
     //Commande boutique
-    public function commandes_boutique(Request $request)
+public function commandes_boutique(Request $request)
 {
     try {
         $boutique = $request->user();
@@ -1327,13 +1327,34 @@ $portefeuille_livreur = Portefeuille::where('role', 'livreur')
             ], 401);
         }
 
-        $commandes = Commande::with(['client', 'boutique', 'ville', 'commune'])
-            ->where('id_btq', $boutique->id)
+        $hashid_btq = Hashids::encode($boutique->id);
+
+        // Récupère toutes les commandes
+        $commandes = Commande::with(['client', 'ville', 'commune'])
             ->latest()
             ->get();
 
-        $result = $commandes->map(function ($commande) {
+        // Filtre: ne garder que les commandes où la boutique apparaît
+        $commandes_filtrees = $commandes->filter(function ($commande) use ($hashid_btq) {
             $articles = json_decode($commande->articles, true) ?? [];
+
+            foreach ($articles as $a) {
+                if (($a['boutique']['hashid_btq'] ?? null) === $hashid_btq) {
+                    return true;
+                }
+            }
+
+            return false;
+        })->values();
+
+        // Transformer format
+        $result = $commandes_filtrees->map(function ($commande) use ($hashid_btq) {
+            $articles = json_decode($commande->articles, true) ?? [];
+
+            // Ne garder que les articles de cette boutique
+            $articles_boutique = array_values(array_filter($articles, function ($a) use ($hashid_btq) {
+                return ($a['boutique']['hashid_btq'] ?? null) === $hashid_btq;
+            }));
 
             return [
                 'hashid' => Hashids::encode($commande->id),
@@ -1346,23 +1367,10 @@ $portefeuille_livreur = Portefeuille::where('role', 'livreur')
                     'ville' => $commande->ville->lib_ville ?? null,
                     'quartier' => $commande->quartier,
                 ],
-                'prix_total_articles' => $commande->prix,
+                'prix_total_articles' => array_sum(array_column($articles_boutique, 'prix')),
                 'livraison' => $commande->livraison,
-                'prix_total_commande' => $commande->prix_total,
-                'articles' => collect($articles)->map(function ($article) {
-                    return [
-                        'hashid' => $article['hashid'] ?? null,
-                        'id_article' => $article['id_article'] ?? null,
-                        'nom_article' => $article['nom_article'] ?? null,
-                        'prix' => $article['prix'] ?? null,
-                        'quantite' => $article['quantite'] ?? null,
-                        'image' => $article['image'] ?? null,
-                        'description' => $article['description'] ?? null,
-                        'variations' => $article['variations'] ?? [],
-                        'boutique' => $article['boutique'] ?? null,
-                        'statut_sous_commande' => $article['statut_sous_commande'] ?? 'En attente',
-                    ];
-                })->values(),
+                'prix_total_commande' => $commande->livraison + array_sum(array_column($articles_boutique, 'prix')),
+                'articles' => $articles_boutique,
                 'statut' => $commande->statut,
                 'is_claimed' => $commande->is_claimed,
                 'code_commande' => $commande->code_commande,
@@ -1381,121 +1389,15 @@ $portefeuille_livreur = Portefeuille::where('role', 'livreur')
     } catch (\Exception $e) {
         return response()->json([
             'success' => false,
-            'message' => 'Erreur serveur : ' . $e->getMessage()
+            'message' => 'Erreur serveur.',
+            'error' => $e->getMessage()
         ], 500);
     }
 }
 
 
-public function reclammer_du(Request $request)
-{
-    $boutique = $request->user();
-
-    if (!$boutique) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Boutique non authentifiée.'
-        ], 401);
-    }
-
-    $decoded = Hashids::decode($request->id_commande);
-    if (empty($decoded)) {
-        return response()->json([
-            'success' => false,
-            'message' => 'ID de commande invalide.'
-        ], 400);
-    }
-
-    $id_commande = $decoded[0];
-
-    $commande = Commande::where('id', $id_commande)
-        ->where('id_btq', $boutique->id)
-        ->where('statut', 'Livrée')
-        ->where('is_paid', false)
-        ->lockForUpdate()
-        ->first();
-
-    if (!$commande) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Commande introuvable ou non éligible à la réclamation.'
-        ], 404);
-    }
-
-    if ($commande->is_claimed === true) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Cette commande a déjà été réclamée.'
-        ], 403);
-    }
-
-    if ($commande->updated_at > Carbon::now()->subDays(3)) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Le délai de 3 jours après la livraison n’est pas encore écoulé.'
-        ], 403);
-    }
-
-    DB::beginTransaction();
-
-    try {
-        $articles = json_decode($commande->articles, true);
-
-        $total_articles = collect($articles)->sum(function ($article) {
-            return (float) $article['prix'] * (int) $article['quantite'];
-        });
-
-        // 90% pour la boutique
-        $pourcentage = Pourcentage::where('id', 1)->first();
-        $montant_boutique = $total_articles * (( 100 - $pourcentage->pourcentage)/100);
 
 
-        // 🔍 Vérifier si un portefeuille existe déjà
-        $deja_cree = Portefeuille::where('id_commande', $commande->id)
-            ->where('role', 'boutique')
-            ->exists();
-        if ($deja_cree) {
-            DB::rollBack();
-            return response()->json([
-                'success' => false,
-                'message' => 'Vous avez déjà réclamé le dû de cette commande.'
-            ], 409);
-        }
-
-        // 🟧 Créer le portefeuille de la boutique
-        $portefeuille_boutique = Portefeuille::create([
-            'montant' => $montant_boutique,
-            'role' => 'boutique',
-            'id_commande' => $commande->id,
-            'id_beneficiaire' => $boutique->id,
-            'statut' => 'Réclamé',
-            'is_paid' => 0,
-        ]);
-
-        // 🟩 Marquer la commande comme réclamée
-        $commande->is_claimed = true;
-        $commande->save();
-
-        DB::commit();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Dû réclamé avec succès. Le montant a été enregistré.',
-            'montant_total_articles' => $total_articles,
-            'montant_boutique_90%' => $montant_boutique,
-            'data' => $portefeuille_boutique,
-        ]);
-
-    } catch (QueryException $e) {
-        DB::rollBack();
-
-        return response()->json([
-            'success' => false,
-            'message' => 'Erreur lors de la réclamation du dû.',
-            'erreur' => $e->getMessage()
-        ], 500);
-    }
-}
 
 
 
@@ -1571,6 +1473,118 @@ public function afficher_portefeuille(Request $request)
 
 
 
+public function reclammer_du(Request $request)
+{
+    $boutique = $request->user();
+
+    if (!$boutique) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Boutique non authentifiée.'
+        ], 401);
+    }
+
+    $decoded = Hashids::decode($request->id_commande);
+    if (empty($decoded)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'ID de commande invalide.'
+        ], 400);
+    }
+
+    $id_commande = $decoded[0];
+
+    // La commande peut appartenir à plusieurs boutiques → on ne filtre plus sur id_btq
+    $commande = Commande::where('id', $id_commande)
+        ->where('statut', 'Livrée')
+        ->where('is_paid', false)
+        ->lockForUpdate()
+        ->first();
+
+    if (!$commande) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Commande introuvable ou non éligible à la réclamation.'
+        ], 404);
+    }
+
+    // Récupération des articles appartenant à la boutique
+    $articles = collect(json_decode($commande->articles, true));
+
+    $articles_boutique = $articles->filter(function($article) use ($boutique) {
+        return isset($article['boutique']['hashid_btq']) 
+            && $article['boutique']['hashid_btq'] === Hashids::encode($boutique->id);
+    });
+
+    if ($articles_boutique->isEmpty()) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Aucun article de cette commande ne vous appartient.'
+        ], 403);
+    }
+
+    // Vérifier si la boutique a déjà réclamé
+    $deja_cree = Portefeuille::where('id_commande', $commande->id)
+        ->where('role', 'boutique')
+        ->where('id_beneficiaire', $boutique->id)
+        ->exists();
+
+    if ($deja_cree) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Vous avez déjà réclamé votre dû pour cette commande.'
+        ], 409);
+    }
+
+    // Vérification délai 3 jours
+    if ($commande->updated_at > Carbon::now()->subDays(3)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Le délai de 3 jours après la livraison n’est pas encore écoulé.'
+        ], 403);
+    }
+
+    DB::beginTransaction();
+
+    try {
+        $total_articles = $articles_boutique->sum(function ($article) {
+            return $article['prix'] * $article['quantite'];
+        });
+
+        $pourcentage = Pourcentage::find(1);
+        $montant_boutique = $total_articles * ((100 - $pourcentage->pourcentage) / 100);
+
+        // Création du portefeuille pour CETTE boutique
+        $portefeuille_boutique = Portefeuille::create([
+            'montant' => $montant_boutique,
+            'role' => 'boutique',
+            'id_commande' => $commande->id,
+            'id_beneficiaire' => $boutique->id,
+            'statut' => 'Réclamé',
+            'is_paid' => false,
+        ]);
+
+        DB::commit();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Dû réclamé avec succès.',
+            'montant_total_articles' => $total_articles,
+            'montant_boutique_90%' => $montant_boutique,
+            'data' => $portefeuille_boutique,
+        ]);
+
+    } catch (QueryException $e) {
+        DB::rollBack();
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la réclamation du dû.',
+            'erreur' => $e->getMessage()
+        ], 500);
+    }
+}
+
 public function marquerCommePayee(Request $request, $hashid)
 {
     $admin = $request->user();
@@ -1584,7 +1598,6 @@ public function marquerCommePayee(Request $request, $hashid)
 
     try {
         $decoded = Hashids::decode($hashid);
-
         if (empty($decoded)) {
             return response()->json([
                 'success' => false,
@@ -1609,9 +1622,7 @@ public function marquerCommePayee(Request $request, $hashid)
             ], 400);
         }
 
-        // 🟧 On récupère la commande liée
         $commande = Commande::find($portefeuille->id_commande);
-
         if (!$commande) {
             return response()->json([
                 'success' => false,
@@ -1619,30 +1630,38 @@ public function marquerCommePayee(Request $request, $hashid)
             ], 404);
         }
 
-        // 🟩 Recalcul du total
-        $articles = json_decode($commande->articles, true);
+        // → On filtre seulement les articles appartenant à la boutique concernée
+        $articles = collect(json_decode($commande->articles, true));
 
-        $total = collect($articles)->sum(
-            fn($a) => $a['prix'] * $a['quantite']
-        );
+        $articles_boutique = $articles->filter(function ($article) use ($portefeuille) {
+            return isset($article['boutique']['hashid_btq']) &&
+                   $article['boutique']['hashid_btq'] === Hashids::encode($portefeuille->id_beneficiaire);
+        });
 
-        $pourcentage = Pourcentage::where('id', 1)->first();
-        
-        $montant_boutique = $total * (( 100 - $pourcentage->pourcentage)/100);
+        if ($articles_boutique->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Aucun article ne correspond à cette boutique.'
+            ], 400);
+        }
 
+        // Calcul total de cette boutique
+        $total = $articles_boutique->sum(fn($a) => $a['prix'] * $a['quantite']);
+
+        $pourcentage = Pourcentage::find(1);
+        $montant_boutique = $total * ((100 - $pourcentage->pourcentage) / 100);
+
+        // Déduire du solde admin
         $realAdmin = Admin::where('role', 'super_admin')->first();
-
         if ($realAdmin) {
             $realAdmin->solde_admin -= $montant_boutique;
-
             if ($realAdmin->solde_admin < 0) {
-                $realAdmin->solde_admin = 0; // sécurité
+                $realAdmin->solde_admin = 0;
             }
-
             $realAdmin->save();
         }
 
-        // 🟢 Marquer le portefeuille comme payé
+        // Marquer comme payé
         $portefeuille->update([
             'is_paid' => true,
             'statut' => 'Payé',
@@ -1663,6 +1682,7 @@ public function marquerCommePayee(Request $request, $hashid)
         ], 500);
     }
 }
+
 
 
 public function solde_boutique(Request $request)
@@ -1706,8 +1726,6 @@ public function solde_boutique(Request $request)
         ], 500);
     }
 }
-
-
 
 
 
