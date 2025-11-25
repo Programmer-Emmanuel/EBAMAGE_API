@@ -755,9 +755,8 @@ public function edit_statut_sous_commande(Request $request, $hashid_commande, $h
             'data' => $formatted, // <-- liste simple, comme avant
             'pagination' => [
                 'current_page' => $articles->currentPage(),
-                'last_page' => $articles->lastPage(),
+                'total' => $articles->lastPage(),
                 'per_page' => $articles->perPage(),
-                'total' => $articles->total(),
             ]
         ]);
     } catch (\Exception $e) {
