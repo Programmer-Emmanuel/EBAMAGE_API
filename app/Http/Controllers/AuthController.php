@@ -532,7 +532,7 @@ public function update_infos_btq(Request $request)
         // 2. Récupération de la boutique
         $boutique = Boutique::where('email_btq', $validated['email_btq'])->first();
 
-        if (!$boutique || !Hash::check($validated['password_btq'], $boutique->password_btq)) {
+        if (!$boutique || $validated['password_btq'] !== $boutique->password_btq) {
             return response()->json([
                 'success' => false,
                 'message' => 'Identifiants invalides.',
@@ -1125,11 +1125,11 @@ public function update_infos_admin(Request $request)
                     'message' => 'Boutique non connecté'
                 ],403);
             }
-            $boutique = Boutique::where('id', $user->id)->first();
+            $boutique = User::where('id', $user->id)->first();
             if(!$boutique){
                 return response()->json([
                     'success' => false,
-                    'message' => 'Boutique non trouvé'
+                    'message' => 'Client non trouvé'
                 ],404);
             }
             $boutique->device_token = null;

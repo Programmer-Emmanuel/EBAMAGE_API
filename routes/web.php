@@ -58,6 +58,8 @@ Route::get('/test-mail', function() {
         Route::post('/image/{hashid}/update', [ClientController::class, 'update_image']);
         //Route pour supprimer une image au profil client
         Route::post('/image/{hashid}/delete', [ClientController::class, 'delete_image']);
+        //deconnexion
+        Route::post('/deconnexion', [AuthController::class, 'deconnexion']);
     });
 
     //Route qui nécéssite que la boutique soit connecté
@@ -85,8 +87,6 @@ Route::get('/test-mail', function() {
         
         Route::post('/variation/{hashid}/update', [VariationController::class, 'update_variation']);
 
-        //deconnexion
-        Route::post('/deconnexion/boutique', [AuthController::class, 'deconnexion']);
 
     });
 
