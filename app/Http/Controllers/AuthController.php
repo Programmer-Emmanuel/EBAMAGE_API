@@ -532,7 +532,7 @@ public function update_infos_btq(Request $request)
         // 2. Récupération de la boutique
         $boutique = Boutique::where('email_btq', $validated['email_btq'])->first();
 
-        if (!$boutique || $validated['password_btq'] !== $boutique->password_btq) {
+        if (!$boutique || !Hash::check($validated['password_btq'], $boutique->password_btq)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Identifiants invalides.',

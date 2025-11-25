@@ -679,45 +679,96 @@ public function edit_statut_sous_commande(Request $request, $hashid_commande, $h
         }
     }
 
-    public function articles_recommandes()
-    {
-        try {
-            $articles = Article::inRandomOrder()
-                ->limit(10)
-                ->get(['id', 'nom_article', 'prix', 'old_price', 'description', 'images']);
+    // public function articles_recommandes()
+    // {
+    //     try {
+    //         $articles = Article::inRandomOrder()
+    //             ->limit(10)
+    //             ->get(['id', 'nom_article', 'prix', 'old_price', 'description', 'images']);
 
-            if ($articles->isEmpty()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Aucun article disponible pour la recommandation.',
-                ], 404);
-            }
+    //         if ($articles->isEmpty()) {
+    //             return response()->json([
+    //                 'success' => false,
+    //                 'message' => 'Aucun article disponible pour la recommandation.',
+    //             ], 404);
+    //         }
 
-            $formatted = $articles->map(function ($article) {
-                $images = json_decode($article->images, true);
-                return [
-                    'nom_article' => $article->nom_article,
-                    'prix' => $article->prix,
-                    'old_price' => $article->old_price,
-                    'description' => $article->description,
-                    'image' => is_array($images) ? $images[0] ?? null : null,
-                    'hashid' => Hashids::encode($article->id),
-                ];
-            });
+    //         $formatted = $articles->map(function ($article) {
+    //             $images = json_decode($article->images, true);
+    //             return [
+    //                 'nom_article' => $article->nom_article,
+    //                 'prix' => $article->prix,
+    //                 'old_price' => $article->old_price,
+    //                 'description' => $article->description,
+    //                 'image' => is_array($images) ? $images[0] ?? null : null,
+    //                 'hashid' => Hashids::encode($article->id),
+    //             ];
+    //         });
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Articles recommandés récupérés avec succès.',
-                'data' => $formatted,
-            ]);
-        } catch (\Exception $e) {
+    //         return response()->json([
+    //             'success' => true,
+    //             'message' => 'Articles recommandés récupérés avec succès.',
+    //             'data' => $formatted,
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Erreur lors de la récupération des articles recommandés.',
+    //             'error' => config('app.debug') ? $e->getMessage() : null,
+    //         ], 500);
+    //     }
+    // }
+
+
+    public function articles_recommandes(Request $request)
+{
+    try {
+        // Nombre d'articles par page (par défaut 10)
+        $perPage = $request->query('per_page', 10);
+
+        $articles = Article::inRandomOrder()
+            ->paginate($perPage, ['id', 'nom_article', 'prix', 'old_price', 'description', 'images']);
+
+        if ($articles->isEmpty()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors de la récupération des articles recommandés.',
-                'error' => config('app.debug') ? $e->getMessage() : null,
-            ], 500);
+                'message' => 'Aucun article disponible pour la recommandation.',
+            ], 404);
         }
+
+        // Transformer les données sans casser la pagination
+        $formatted = $articles->map(function ($article) {
+            $images = json_decode($article->images, true);
+            return [
+                'nom_article' => $article->nom_article,
+                'prix' => $article->prix,
+                'old_price' => $article->old_price,
+                'description' => $article->description,
+                'image' => is_array($images) ? $images[0] ?? null : null,
+                'hashid' => Hashids::encode($article->id),
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Articles recommandés récupérés avec succès.',
+            'data' => $formatted, // <-- liste simple, comme avant
+            'pagination' => [
+                'current_page' => $articles->currentPage(),
+                'last_page' => $articles->lastPage(),
+                'per_page' => $articles->perPage(),
+                'total' => $articles->total(),
+            ]
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la récupération des articles recommandés.',
+            'error' => config('app.debug') ? $e->getMessage() : null,
+        ], 500);
     }
+}
+
 
 
 private function sendPushNotification($deviceToken, $title, $body, $type = null)
