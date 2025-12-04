@@ -214,4 +214,32 @@ public function update_image_boutique(Request $request, $hashid)
         ], 500);
     }
 }
+
+    public function delete_client(Request $request){
+        try{
+            $user = $request->user();
+
+            $delete = User::find($user->id);
+
+            if(!$delete){
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Client non trouvé'
+                ],404);
+            }
+            $delete->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Client supprimé avec succès'
+            ],200);
+        }
+        catch(QueryException $e){
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la suppression du client',
+                'erreur' => $e->getMessage() 
+            ],500);
+        }
+    }
 }

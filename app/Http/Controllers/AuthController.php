@@ -291,7 +291,7 @@ class AuthController extends Controller
         if (!Hash::check($validated['password_clt'], $client->password_clt)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Mot de passe incorrect.',
+                'message' => 'Identifiants incorrect.',
             ], 401);
         }
 

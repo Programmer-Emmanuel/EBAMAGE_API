@@ -138,6 +138,8 @@ Route::get('/test-mail', function() {
 
         //Initier paiement
         Route::post('/paiement/initier', [PaiementController::class, 'initierPaiement']);
+
+        Route::post('/client/delete', [ClientController::class, 'delete_client']);
     });
     Route::get('/commande/{hashid}', [CommandeController::class, 'commande']);
 
