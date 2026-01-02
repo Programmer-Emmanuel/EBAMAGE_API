@@ -42,6 +42,11 @@ Route::get('/test-mail', function() {
     Route::post('/resend/otp/client', [AuthController::class, 'resendOtp']);
     Route::post('/login/client', [AuthController::class, 'login_clt']);
 
+    //Mot de passe oublié
+    Route::post('/demande/reinitialisation/password', [AuthController::class, 'demande_reset_password']);
+    Route::post('/verification/token/password', [AuthController::class, 'verify_otp_password']);
+    Route::post('/reinitialisation/password', [AuthController::class, 'nouveau_password']);
+
     //Route authentification de la boutique
     Route::post('/register/boutique', [AuthController::class, 'register_btq']);
     Route::post('/login/boutique', [AuthController::class, 'login_btq']);
