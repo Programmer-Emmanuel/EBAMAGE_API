@@ -3,15 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Mail\OtpMail;
+use App\Mail\ResetPasswordAdminMail;
+use App\Mail\ResetPasswordBoutiqueMail;
+use App\Mail\ResetPasswordClientMail;
 use App\Models\Admin;
 use App\Models\Boutique;
 use App\Models\Livreur;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Validator;
 use PDOException;
 use Vinkla\Hashids\Facades\Hashids;
 
@@ -1147,6 +1152,210 @@ public function update_infos_admin(Request $request)
             ],500);
         }
     }
+
+
+private function findAccountByEmail(string $email)
+{
+    if ($boutique = Boutique::where('email_btq', $email)->first()) {
+        return [
+            'model' => $boutique,
+            'type' => 'boutique',
+            'email_field' => 'email_btq',
+            'password_field' => 'password_btq'
+        ];
+    }
+
+    if ($user = User::where('email_clt', $email)->first()) {
+        return [
+            'model' => $user,
+            'type' => 'client',
+            'email_field' => 'email_clt',
+            'password_field' => 'password_clt'
+        ];
+    }
+
+    if ($admin = Admin::where('email', $email)->first()) {
+        return [
+            'model' => $admin,
+            'type' => 'admin',
+            'email_field' => 'email',
+            'password_field' => 'password'
+        ];
+    }
+
+    return null;
+}
+
+public function demande_reset_password(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'email' => 'required|email'
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'success' => false,
+            'message' => $validator->errors()->first()
+        ], 422);
+    }
+
+    try {
+        $accountData = $this->findAccountByEmail($request->email);
+
+        if (!$accountData) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Compte non trouvé'
+            ], 404);
+        }
+
+        $account = $accountData['model'];
+
+        // 🔐 OTP sécurisé (4 chiffres)
+        $otp = random_int(1000, 9999);
+
+        $account->password_reset_token = $otp;
+        $account->password_reset_expire_at = now()->addMinutes(15);
+        $account->save();
+
+        $type = $accountData['type'];
+        $emailField = $accountData['email_field'];
+
+        switch ($type) {
+            case 'boutique':
+                Mail::to($account->$emailField)
+                    ->send(new ResetPasswordBoutiqueMail($account, $otp));
+                break;
+
+            case 'client':
+                Mail::to($account->$emailField)
+                    ->send(new ResetPasswordClientMail($account, $otp));
+                break;
+
+            case 'admin':
+                Mail::to($account->$emailField)
+                    ->send(new ResetPasswordAdminMail($account, $otp));
+                break;
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Code de réinitialisation envoyé'
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la demande de réinitialisation',
+            'erreur' => $e->getMessage()
+        ], 500);
+    }
+}
+public function verify_otp_password(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'email' => 'required|email',
+        'otp'   => 'required|digits:4'
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'success' => false,
+            'message' => $validator->errors()->first()
+        ], 422);
+    }
+
+    try {
+        $accountData = $this->findAccountByEmail($request->email);
+
+        if (!$accountData) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Compte non trouvé'
+            ], 404);
+        }
+
+        $account = $accountData['model'];
+
+        if (
+            $account->password_reset_token == $request->otp &&
+            Carbon::parse($account->password_reset_expire_at)->isFuture()
+        ) {
+            $account->password_reset_token = null;
+            $account->password_reset_expire_at = null;
+            $account->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'OTP valide'
+            ], 200);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'OTP incorrect ou expiré'
+        ], 400);
+
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la vérification du code OTP',
+            'erreur' => $e->getMessage()
+        ], 500);
+    }
+}
+public function nouveau_password(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'email'    => 'required|email',
+        'password' => 'required|confirmed|min:6'
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'success' => false,
+            'message' => $validator->errors()->first()
+        ], 422);
+    }
+
+    try {
+        $accountData = $this->findAccountByEmail($request->email);
+
+        if (!$accountData) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Compte non trouvé'
+            ], 404);
+        }
+
+        $account = $accountData['model'];
+        $passwordField = $accountData['password_field'];
+
+        if ($account->password_reset_token !== null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Veuillez d’abord valider le code de réinitialisation'
+            ], 400);
+        }
+
+        // 🔐 Hash sur le BON champ
+        $account->$passwordField = Hash::make($request->password);
+        $account->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Mot de passe réinitialisé avec succès'
+        ], 200);
+
+    } catch (QueryException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la réinitialisation du mot de passe',
+            'erreur' => $e->getMessage()
+        ], 500);
+    }
+}
+
 
 
 }

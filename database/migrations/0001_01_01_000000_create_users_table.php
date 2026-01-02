@@ -23,6 +23,8 @@ return new class extends Migration
             $table->timestamp('email_verified_at')->nullable();
             $table->boolean('is_verify')->default(false);
             $table->string('device_token')->nullable()->unique();
+            $table->string('password_reset_token')->nullable();
+            $table->timestamp('password_reset_expire_at')->nullable();
             $table->rememberToken();
             $table->timestamps();
         });

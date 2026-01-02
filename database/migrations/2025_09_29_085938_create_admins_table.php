@@ -19,6 +19,8 @@ return new class extends Migration
             $table->string('password');
             $table->string("role")->default("admin");
             $table->integer('solde_admin')->default(0);
+            $table->string('password_reset_token')->nullable();
+            $table->timestamp('password_reset_expire_at')->nullable();
             $table->timestamps();
         });
     }

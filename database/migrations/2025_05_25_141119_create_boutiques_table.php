@@ -19,6 +19,8 @@ return new class extends Migration
             $table->string('image_btq')->nullable();
             $table->string('password_btq');
             $table->string('device_token')->nullable()->unique();
+            $table->string('password_reset_token')->nullable();
+            $table->timestamp('password_reset_expire_at')->nullable();
             $table->rememberToken();
             $table->timestamps();
         });
