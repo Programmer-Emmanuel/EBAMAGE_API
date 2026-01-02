@@ -56,9 +56,9 @@ class AuthController extends Controller
         }
 
         // 3. Génération du code OTP
-        // $code_otp = rand(1000, 9999);
+        $code_otp = rand(1000, 9999);
 
-        $code_otp = substr($validatedData['tel_clt'], -4);
+        // $code_otp = substr($validatedData['tel_clt'], -4);
 
         // 4. Création du compte client
         $client = new User();
@@ -72,17 +72,17 @@ class AuthController extends Controller
         $client->save();
 
         // 5. Envoi de l'email
-        // try {
-        //     Mail::to($client->email_clt)->send(new OtpMail($code_otp));
-        // } catch (\Exception $e) {
-        //     // Si l'email échoue, supprimer le compte et retourner une erreur
-        //     $client->delete();
+        try {
+            Mail::to($client->email_clt)->send(new OtpMail($code_otp));
+        } catch (\Exception $e) {
+            // Si l'email échoue, supprimer le compte et retourner une erreur
+            $client->delete();
 
-        //     return response()->json([
-        //         'success' => false,
-        //         'message' => 'Erreur lors de l’envoi de l’email de confirmation. Veuillez réessayer.',
-        //     ], 500);
-        // }
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de l’envoi de l’email de confirmation. Veuillez réessayer.',
+            ], 500);
+        }
 
         // 6. Réponse finale
         return response()->json([
@@ -223,21 +223,21 @@ class AuthController extends Controller
         }
 
         // 3. Génération d’un nouveau code OTP
-        $code_otp = substr($user->tel_clt, -4);
+        $code_otp = rand(1000, 9999);
         $user->code_otp = $code_otp;
         $user->otp_expires_at = now()->addMinutes(60);
         $user->save();
 
         // 4. Envoi du mail
-        // try {
-        //     Mail::to($user->email_clt)->send(new OtpMail($code_otp));
-        // } catch (QueryException $e) {
-        //     return response()->json([
-        //         'success' => false,
-        //         'message' => 'Une erreur est survenue lors de l’envoi de l’email. Veuillez réessayer plus tard.',
-        //         // 'erreur' => $e->getMessage() // À activer en mode debug si nécessaire
-        //     ], 500);
-        // }
+        try {
+            Mail::to($user->email_clt)->send(new OtpMail($code_otp));
+        } catch (QueryException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Une erreur est survenue lors de l’envoi de l’email. Veuillez réessayer plus tard.',
+                // 'erreur' => $e->getMessage() // À activer en mode debug si nécessaire
+            ], 500);
+        }
 
         // 5. Succès
         return response()->json([

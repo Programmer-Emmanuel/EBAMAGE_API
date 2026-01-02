@@ -176,6 +176,11 @@ class CommandeController extends Controller
 
         }
 
+        if ($commande && $commande->client && $commande->boutique) {
+            Mail::to($commande->client->email_clt)->send(new CommandeCreeeMail($commande, 'client'));
+            Mail::to($commande->boutique->email_btq)->send(new CommandeCreeeMail($commande, 'boutique'));
+        }
+
         return response()->json([
             'success' => true,
             'message' => "Commande ajoutée avec succès.",
@@ -364,10 +369,10 @@ public function rechercherCommande(Request $request)
             ->with(['client', 'boutique'])
             ->first();
 
-        // if ($commande && $commande->client && $commande->boutique) {
-        //     Mail::to($commande->client->email_clt)->send(new CommandeConfirmeeMail($commande, 'client'));
-        //     Mail::to($commande->boutique->email_btq)->send(new CommandeConfirmeeMail($commande, 'boutique'));
-        // }
+        if ($commande && $commande->client && $commande->boutique) {
+            Mail::to($commande->client->email_clt)->send(new CommandeConfirmeeMail($commande, 'client'));
+            Mail::to($commande->boutique->email_btq)->send(new CommandeConfirmeeMail($commande, 'boutique'));
+        }
     }
 
     return $response;
@@ -433,6 +438,11 @@ public function edit_statut_livree($hashid)
             'success' => true,
             'message' => 'Commande marquée comme livrée. L’argent a été ajouté à l’admin.',
         ], 200);
+
+        if ($commande && $commande->client && $commande->boutique) {
+            Mail::to($commande->client->email_clt)->send(new CommandeLivreeMail($commande, 'client'));
+            Mail::to($commande->boutique->email_btq)->send(new CommandeLivreeMail($commande, 'boutique'));
+        }
     }
 
     return $response;
@@ -450,10 +460,10 @@ public function edit_statut_annule($hashid)
             ->with(['client', 'boutique'])
             ->first();
 
-        // if ($commande && $commande->client && $commande->boutique) {
-        //     Mail::to($commande->client->email_clt)->send(new CommandeAnnuleeMail($commande, 'client'));
-        //     Mail::to($commande->boutique->email_btq)->send(new CommandeAnnuleeMail($commande, 'boutique'));
-        // }
+        if ($commande && $commande->client && $commande->boutique) {
+            Mail::to($commande->client->email_clt)->send(new CommandeAnnuleeMail($commande, 'client'));
+            Mail::to($commande->boutique->email_btq)->send(new CommandeAnnuleeMail($commande, 'boutique'));
+        }
     }
 
     return $response;
@@ -1510,15 +1520,7 @@ public function afficher_portefeuille(Request $request)
 }
 
 
-// public function afficher_portefeuille(Request $request){
-//     try{
 
-
-//     }
-//     catch(QueryException $e){
-
-//     }
-// }
 
 
 
