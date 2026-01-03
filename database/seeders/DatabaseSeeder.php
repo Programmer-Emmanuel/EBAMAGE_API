@@ -196,6 +196,6 @@ class DatabaseSeeder extends Seeder
         $this->command->info("   - Prix de livraison créé!");
         $this->command->info("   - Seuil de prix livraison gratuite créé!");
         $this->command->info("   - Variation color créée!");
-        $this->command->info("   - Pourcenatge créée!");
+        $this->command->info("   - Pourcentage créée!");
     }
 }
