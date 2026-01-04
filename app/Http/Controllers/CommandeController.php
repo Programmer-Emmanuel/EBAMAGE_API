@@ -202,7 +202,7 @@ class CommandeController extends Controller
             Mail::to($commande->client->email_clt)
                 ->send(new CommandeCreeeMail($commande, 'client'));
         }
-
+ 
 
         // 📩 Mail pour CHAQUE boutique
         foreach ($articlesParBoutique as $btqId => $articlesBtq) {
