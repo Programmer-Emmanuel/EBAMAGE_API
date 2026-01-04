@@ -458,13 +458,13 @@
                 </div>
                 
                 <!-- Adresse de livraison -->
-                <div class="info-item" style="margin-top: 15px;">
+                <!-- <div class="info-item" style="margin-top: 15px;">
                     <span class="info-label">Adresse de livraison</span>
                     <span class="info-value">
                         {{ $commande->quartier }}, {{ $commande->commune->lib_commune ?? 'N/A' }}, 
                         {{ $commande->ville->lib_ville ?? 'N/A' }}
                     </span>
-                </div>
+                </div> -->
             </div>
             
             <!-- Liste des articles (en grisé) -->

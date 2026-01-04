@@ -176,10 +176,47 @@ class CommandeController extends Controller
 
         }
 
-        if ($commande && $commande->client && $commande->boutique) {
-            Mail::to($commande->client->email_clt)->send(new CommandeCreeeMail($commande, 'client'));
-            Mail::to($commande->boutique->email_btq)->send(new CommandeCreeeMail($commande, 'boutique'));
+        // Regrouper les articles par boutique
+        $articlesParBoutique = [];
+
+        foreach ($articlesArray as $article) {
+            $hashidBtq = $article['boutique']['hashid_btq'];
+
+            if (!$hashidBtq) continue;
+
+            $btqIdDecoded = Hashids::decode($hashidBtq);
+            if (empty($btqIdDecoded)) continue;
+
+            $btqId = $btqIdDecoded[0];
+
+            if (!isset($articlesParBoutique[$btqId])) {
+                $articlesParBoutique[$btqId] = [];
+            }
+
+            $articlesParBoutique[$btqId][] = $article;
         }
+
+
+        // 📩 Mail client (commande complète)
+        Mail::to($commande->client->email_clt)
+            ->send(new CommandeCreeeMail($commande, 'client'));
+
+        // 📩 Mail pour CHAQUE boutique
+        foreach ($articlesParBoutique as $btqId => $articlesBtq) {
+
+            $boutique = Boutique::find($btqId);
+            if (!$boutique) continue;
+
+            // Cloner la commande pour ne pas modifier l’originale
+            $commandeBoutique = clone $commande;
+
+            // Injecter uniquement les articles de la boutique
+            $commandeBoutique->articles = json_encode($articlesBtq);
+
+            Mail::to($boutique->email_btq)
+                ->send(new CommandeCreeeMail($commandeBoutique, 'boutique'));
+        }
+
 
         return response()->json([
             'success' => true,
