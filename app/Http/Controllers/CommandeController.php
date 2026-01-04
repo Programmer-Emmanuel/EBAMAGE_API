@@ -198,8 +198,11 @@ class CommandeController extends Controller
 
 
         // 📩 Mail client (commande complète)
-        Mail::to($commande->client->email_clt)
-            ->send(new CommandeCreeeMail($commande, 'client'));
+        if ($commande->client) {
+            Mail::to($commande->client->email_clt)
+                ->send(new CommandeCreeeMail($commande, 'client'));
+        }
+
 
         // 📩 Mail pour CHAQUE boutique
         foreach ($articlesParBoutique as $btqId => $articlesBtq) {
@@ -207,15 +210,30 @@ class CommandeController extends Controller
             $boutique = Boutique::find($btqId);
             if (!$boutique) continue;
 
-            // Cloner la commande pour ne pas modifier l’originale
+            // Recalcul total & quantité PAR boutique
+            $totalBoutique = 0;
+            $quantiteBoutique = 0;
+
+            foreach ($articlesBtq as $art) {
+                $totalBoutique += ($art['prix'] * $art['quantite']);
+                $quantiteBoutique += $art['quantite'];
+            }
+
+            // Cloner la commande
             $commandeBoutique = clone $commande;
 
-            // Injecter uniquement les articles de la boutique
+            // Injecter uniquement les données boutique
             $commandeBoutique->articles = json_encode($articlesBtq);
+            $commandeBoutique->prix = $totalBoutique;
+            $commandeBoutique->quantite = $quantiteBoutique;
+            $commandeBoutique->livraison = 0;
+            $commandeBoutique->prix_total = $totalBoutique;
 
             Mail::to($boutique->email_btq)
                 ->send(new CommandeCreeeMail($commandeBoutique, 'boutique'));
         }
+
+
 
 
         return response()->json([
