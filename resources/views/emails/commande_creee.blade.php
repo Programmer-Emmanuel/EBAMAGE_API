@@ -388,14 +388,9 @@
                     <span class="summary-value">{{ number_format($commande->prix, 0, ',', ' ') }} FCFA</span>
                 </div>
                 
-                <div class="summary-row">
-                    <span class="summary-label">Frais de livraison</span>
-                    <span class="summary-value">{{ number_format($commande->livraison, 0, ',', ' ') }} FCFA</span>
-                </div>
-                
                 <div class="summary-row total-row">
                     <span class="summary-label">Total de la commande</span>
-                    <span class="summary-value">{{ number_format($commande->prix_total, 0, ',', ' ') }} FCFA</span>
+                    <span class="summary-value">{{ number_format($commande->prix, 0, ',', ' ') }} FCFA</span>
                 </div>
             </div>
             
