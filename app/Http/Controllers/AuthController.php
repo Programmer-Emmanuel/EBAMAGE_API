@@ -921,7 +921,7 @@ public function update_infos_btq(Request $request)
                 return response()->json([
                     'success' => false,
                     "message" => 'Email ou Mot de passe incorrect.'
-                ]);
+                ],404);
             }
             if($admin && Hash::check($request->password, $admin->password)){
                 $token = $admin->createToken('admin-token')->plainTextToken;
@@ -934,15 +934,20 @@ public function update_infos_btq(Request $request)
                     ],
                     'token' => $token,
                     'message' => 'Administrateur trouvé avec succès.'
-                ]);
+                ],200);
             }
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Email ou mot de passe incorrect.'
+            ], 401);
         }
         catch(QueryException $e){
             return response()->json([
                 "success" => false,
                 "message" => 'Une erreur est survenue',
                 "erreur" => $e->getMessage()
-            ]);
+            ],500);
         }
     }
 
@@ -968,6 +973,7 @@ public function update_infos_btq(Request $request)
                 "hashid" => Hashids::encode($admin->id),
                 "nom" => $admin->nom,
                 "email" => $admin->email,
+                "tel" => $admin->tel,
                 "created_at" => $admin->created_at,
                 "updated_at" => $admin->updated_at
             ]
@@ -997,7 +1003,7 @@ public function update_infos_admin(Request $request)
         $validated = $request->validate([
             'nom' => 'required|string|max:255',
             'email' => 'required|email|unique:admins,email,' . $admin->id,
-            'tel' => 'required|email|unique:admins'
+            'tel' => 'required|digits:10'
         ], [
             'nom.required' => 'Le nom de admin est obligatoire.',
             'email.email' => 'Adresse email invalide.',
@@ -1016,6 +1022,7 @@ public function update_infos_admin(Request $request)
                 "hashid" => Hashids::encode($admin->id),
                 "nom" => $admin->nom,
                 "email" => $admin->email,
+                "tel" => $admin->tel,
                 "created_at" => $admin->created_at,
                 "updated_at" => $admin->updated_at
             ],
