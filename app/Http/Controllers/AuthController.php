@@ -9,12 +9,15 @@ use App\Mail\ResetPasswordClientMail;
 use App\Models\Admin;
 use App\Models\Boutique;
 use App\Models\Livreur;
+use App\Models\NotificationAdmin;
 use App\Models\User;
+use Google\Auth\OAuth2;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 use PDOException;
@@ -408,7 +411,32 @@ class AuthController extends Controller
         $boutique->tel_btq = $validated['tel_btq'];
         $boutique->image_btq = null;
         $boutique->password_btq = Hash::make($validated['password_btq']);
+        $boutique->is_active = false;
         $boutique->save();
+
+
+        $this->sendFcmNotification(
+            $boutique->device_token,
+            "Bienvenue sur EBAMAGE 🎉",
+            "Votre boutique a été créée avec succès. Un administrateur acceptera votre demande"
+        );
+
+        $admin = Admin::where('role', 'super_admin')->first();
+
+        if(!$admin){
+            return response()->json([
+                'success' => false,
+                'message' => 'Admin non touvé'
+            ], 404);
+        }
+
+
+        $this->sendFcmNotificationAdmin(
+            $admin->id,
+            $admin->device_token,
+            "Une nouvelle boutique s’est inscrite ",
+            "La boutique " . $boutique->nom_btq . " vient de s’inscrire. Accéder à votre plateforme pour activer son compte."
+        );
 
         // 3. Suppression du champ mot de passe de la réponse
         $boutique->makeHidden(['password_btq']);
@@ -521,33 +549,51 @@ public function update_infos_btq(Request $request)
 
 
     //CONNEXION BOUTIQUE
-   public function login_btq(Request $request)
+public function login_btq(Request $request)
 {
     try {
-        // 1. Validation des champs
+        // 1. Validation
         $validated = $request->validate([
-            'email_btq' => 'required|email',
+            'login' => 'required', // email OU téléphone
             'password_btq' => 'required',
         ], [
-            'email_btq.required' => 'L’adresse email de la boutique est obligatoire.',
-            'email_btq.email' => 'L’adresse email n’est pas valide.',
+            'login.required' => 'Email ou numéro de téléphone requis.',
             'password_btq.required' => 'Le mot de passe est obligatoire.',
         ]);
 
-        // 2. Récupération de la boutique
-        $boutique = Boutique::where('email_btq', $validated['email_btq'])->first();
+        // 2. Trouver boutique (email OU téléphone)
+        $boutique = Boutique::where('email_btq', $validated['login'])
+            ->orWhere('tel_btq', $validated['login'])
+            ->first();
 
-        if (!$boutique || !Hash::check($validated['password_btq'], $boutique->password_btq)) {
+        // 3. Vérifier existence
+        if (!$boutique) {
             return response()->json([
                 'success' => false,
                 'message' => 'Identifiants invalides.',
             ], 401);
         }
 
-        // 3. Création du token si les identifiants sont corrects
+        // 4. Vérifier activation
+        if ($boutique->is_active != true) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Votre compte n’est pas encore activé',
+            ], 403);
+        }
+
+        // 5. Vérifier mot de passe
+        if (!Hash::check($validated['password_btq'], $boutique->password_btq)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Identifiants invalides.',
+            ], 401);
+        }
+
+        // 6. Token
         $token = $boutique->createToken('boutique-token')->plainTextToken;
 
-        // 4. Suppression du champ mot de passe de la réponse
+        // 7. Masquer password
         $boutique->makeHidden(['password_btq']);
 
         return response()->json([
@@ -557,18 +603,17 @@ public function update_infos_btq(Request $request)
             'token' => $token,
         ]);
 
-    } catch (QueryException$e) {
+    } catch (\Illuminate\Validation\ValidationException $e) {
         return response()->json([
             'success' => false,
             'message' => 'Erreur de validation.',
-            'errors' => $e->getMessage(),
+            'errors' => $e->errors(),
         ], 422);
 
-    } catch (QueryException $e) {
+    } catch (\Throwable $e) {
         return response()->json([
             'success' => false,
-            'message' => 'Une erreur est survenue lors de la tentative de connexion.',
-            // 'erreur' => $e->getMessage() // à activer en debug si besoin
+            'message' => 'Une erreur est survenue lors de la connexion.',
         ], 500);
     }
 }
@@ -1128,6 +1173,40 @@ public function update_infos_admin(Request $request)
         }
     }
 
+    public function toogle_active_btq(Request $request, $hashid){
+        try{
+            $id = Hashids::decode($hashid)[0] ?? null;
+            $boutique = Boutique::find($id);
+            if(!$boutique){
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Boutique introuvable'
+                ], 404);
+            }
+
+            $boutique->is_active = !$boutique->is_active;
+            $boutique->save();
+
+            $is_active = 'Compte activé avec succès';
+
+            if($boutique->is_active === false){
+                $is_active = 'Compte desactivé avec succès';
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $is_active
+            ]);
+        }   
+        catch(QueryException $e){
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de l’activation du compte',
+                'erreur' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function deconnexion(Request $request){
         try{
             $user = $request->user();
@@ -1363,6 +1442,207 @@ public function nouveau_password(Request $request)
     }
 }
 
+private function sendFcmNotification($deviceToken, $title, $body, $type = null)
+{
+    if (empty($deviceToken)) {
+        Log::warning("⚠️ Aucun device token fourni pour la notification.");
+        return ['success' => false, 'error' => 'Token vide'];
+    }
 
+    // ✅ Cas 1 : Token Expo (React Native)
+    if (str_starts_with($deviceToken, 'ExponentPushToken')) {
+        try {
+            $data = [
+                'to' => $deviceToken,
+                'sound' => 'default',
+                'title' => $title,
+                'body' => $body,
+                'data' => [
+                    'type' => $type ?? 'default',
+                ],
+            ];
+
+            $response = Http::withHeaders([
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+            ])->timeout(10)->post('https://api.expo.dev/v2/push/send', $data);
+
+            if ($response->failed()) {
+                Log::error('❌ Erreur Expo: ' . $response->body());
+                return ['success' => false, 'error' => 'Erreur HTTP Expo: ' . $response->status()];
+            }
+
+            $res = $response->json();
+            if (isset($res['data'][0]['status']) && $res['data'][0]['status'] === 'ok') {
+                Log::info("✅ Notification Expo envoyée avec succès", ['to' => $deviceToken]);
+                return ['success' => true];
+            }
+
+            $error = $res['data'][0]['message'] ?? 'Erreur inconnue Expo';
+            Log::error("❌ Erreur Expo: $error", ['response' => $res]);
+            return ['success' => false, 'error' => $error];
+
+        } catch (\Throwable $e) {
+            Log::error('Erreur lors de l\'envoi via Expo : ' . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    // ✅ Cas 2 : Token FCM (Firebase)
+    $projectId = env('FCM_PROJECT_ID');
+    
+    try {
+        // ✅ OPTION 1: Utilisation des variables d'environnement
+        $jsonKey = [
+            'type' => env('FIREBASE_TYPE'),
+            'project_id' => env('FIREBASE_PROJECT_ID'),
+            'private_key_id' => env('FIREBASE_PRIVATE_KEY_ID'),
+            'private_key' => str_replace("\\n", "\n", env('FIREBASE_PRIVATE_KEY')),
+            'client_email' => env('FIREBASE_CLIENT_EMAIL'),
+            'client_id' => env('FIREBASE_CLIENT_ID'),
+            'auth_uri' => env('FIREBASE_AUTH_URI'),
+            'token_uri' => env('FIREBASE_TOKEN_URI'),
+            'auth_provider_x509_cert_url' => env('FIREBASE_AUTH_PROVIDER_X509_CERT_URL'),
+            'client_x509_cert_url' => env('FIREBASE_CLIENT_X509_CERT_URL'),
+            'universe_domain' => env('FIREBASE_UNIVERSE_DOMAIN')
+        ];
+
+        // Vérifier que toutes les variables nécessaires sont présentes
+        if (empty($jsonKey['private_key']) || empty($jsonKey['client_email'])) {
+            Log::error('❌ Configuration Firebase manquante');
+            return ['success' => false, 'error' => 'Configuration Firebase manquante'];
+        }
+
+        $privateKey = $jsonKey['private_key'];
+
+        $oauth2 = new OAuth2([
+            'audience' => 'https://oauth2.googleapis.com/token',
+            'issuer' => $jsonKey['client_email'],
+            'signingAlgorithm' => 'RS256',
+            'signingKey' => $privateKey,
+            'tokenCredentialUri' => 'https://oauth2.googleapis.com/token',
+            'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
+        ]);
+
+        $accessToken = $oauth2->fetchAuthToken()['access_token'];
+
+        // ✅ Corps du message FCM
+        $payload = [
+            'message' => [
+                'token' => $deviceToken,
+                'notification' => [
+                    'title' => $title,
+                    'body' => $body,
+                ],
+                'data' => [
+                    'type' => $type ?? 'default'
+                ],
+            ],
+        ];
+
+        $url = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $accessToken,
+            'Content-Type' => 'application/json',
+        ])->post($url, $payload);
+
+        if ($response->failed()) {
+            Log::error('❌ Erreur FCM: ' . $response->body());
+            return ['success' => false, 'error' => 'Erreur FCM: ' . $response->status()];
+        }
+
+        Log::info("✅ Notification FCM envoyée avec succès", ['to' => $deviceToken]);
+        return ['success' => true, 'response' => $response];
+
+    } catch (\Throwable $e) {
+        Log::error('❌ Erreur lors de l\'envoi FCM : ' . $e->getMessage());
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+private function sendFcmNotificationAdmin($adminId, $deviceToken, $title, $body, $type = 'default')
+{
+    if (empty($deviceToken)) {
+        Log::warning("⚠️ Token FCM vide (admin notif)");
+        return ['success' => false, 'error' => 'Token vide'];
+    }
+
+    try {
+        $projectId = env('FCM_PROJECT_ID');
+
+        // 🔐 Firebase config
+        $jsonKey = [
+            'client_email' => env('FIREBASE_CLIENT_EMAIL'),
+            'private_key' => str_replace("\\n", "\n", env('FIREBASE_PRIVATE_KEY')),
+        ];
+
+        if (empty($jsonKey['private_key']) || empty($jsonKey['client_email'])) {
+            Log::error("❌ Firebase config manquante");
+            return ['success' => false, 'error' => 'Firebase config manquante'];
+        }
+
+        // 🔐 OAuth2
+        $oauth2 = new \Google\Auth\OAuth2([
+            'audience' => 'https://oauth2.googleapis.com/token',
+            'issuer' => $jsonKey['client_email'],
+            'signingAlgorithm' => 'RS256',
+            'signingKey' => $jsonKey['private_key'],
+            'tokenCredentialUri' => 'https://oauth2.googleapis.com/token',
+            'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
+        ]);
+
+        $accessToken = $oauth2->fetchAuthToken()['access_token'];
+
+        // 📦 Payload FCM
+        $payload = [
+            'message' => [
+                'token' => $deviceToken,
+                'notification' => [
+                    'title' => $title,
+                    'body' => $body,
+                ],
+                'data' => [
+                    'type' => $type,
+                ],
+                'android' => ['priority' => 'high'],
+            ],
+        ];
+
+        $url = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
+
+        $response = Http::withToken($accessToken)
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->post($url, $payload);
+
+        if ($response->failed()) {
+            Log::error("❌ FCM ERROR: " . $response->body());
+            return ['success' => false, 'error' => $response->body()];
+        }
+
+        // ✅ 1. SAUVEGARDE EN BASE (AUTO)
+        NotificationAdmin::create([
+            'admin_id' => $adminId,
+            'title' => $title,
+            'message' => $body,
+            'type' => $type,
+        ]);
+
+        Log::info("✅ Notification admin envoyée + sauvegardée", [
+            'admin_id' => $adminId,
+            'title' => $title
+        ]);
+
+        return ['success' => true];
+
+    } catch (\Throwable $e) {
+        Log::error("❌ FCM Exception: " . $e->getMessage());
+
+        return [
+            'success' => false,
+            'error' => $e->getMessage()
+        ];
+    }
+}
 
 }

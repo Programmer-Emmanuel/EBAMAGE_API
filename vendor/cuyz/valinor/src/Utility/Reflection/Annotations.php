@@ -12,9 +12,15 @@ use ReflectionProperty;
 
 use function array_filter;
 use function array_merge;
+use function array_pop;
+use function array_shift;
+use function array_unshift;
 use function array_values;
 use function current;
+use function end;
 use function in_array;
+use function preg_replace;
+use function str_starts_with;
 use function trim;
 
 /** @internal */
@@ -70,8 +76,11 @@ final class Annotations
     {
         return (new self($reflection->getDocComment()))->filteredByPriority(
             '@phpstan-template',
+            '@phpstan-template-covariant',
             '@psalm-template',
+            '@psalm-template-covariant',
             '@template',
+            '@template-covariant',
         );
     }
 

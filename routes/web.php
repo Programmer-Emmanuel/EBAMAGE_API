@@ -51,6 +51,8 @@ Route::get('/test-mail', function() {
     Route::post('/register/boutique', [AuthController::class, 'register_btq']);
     Route::post('/login/boutique', [AuthController::class, 'login_btq']);
 
+    
+
     // Route authentification du livreur
     Route::post('/register/livreur', [AuthController::class, 'register_liv']);
     Route::post('/verify/otp/livreur', [AuthController::class, 'verifyOtp_liv']);
@@ -90,7 +92,7 @@ Route::get('/test-mail', function() {
         Route::post('/reclammer/du', [CommandeController::class, 'reclammer_du']);
         Route::get('/solde/boutique', [CommandeController::class, 'solde_boutique']);
         
-        Route::post('/variation/{hashid}/update', [VariationController::class, 'update_variation']);
+
 
 
     });
@@ -102,7 +104,7 @@ Route::get('/test-mail', function() {
     Route::get('/articles', [ArticleController::class, 'liste_article']);
     Route::get('/article/{hashid}', [ArticleController::class, 'article']);
     Route::get('/article/{hashid}/categorie', [ArticleController::class, 'articlesParCategorie']);
-    Route::get('/variations/boutique', [VariationController::class, 'liste_variation']);
+    Route::get('/variations/all', [VariationController::class, 'liste_variation']);
     Route::get('/variations', [VariationController::class, 'liste_variation_sans_lib']);
     //Trier les articles par prix du moins cher au plus cher
     Route::get('/article/trie/moins/plus/prix', [ArticleController::class, 'trier_par_prix_moinsCher_cher']);
@@ -205,6 +207,9 @@ Route::get('/test-mail', function() {
         Route::get('/admins', [AuthController::class, "liste_admin"]);
         Route::post('/admin/delete/{hashid}', [AuthController::class, "delete_admin"]);
 
+        //Gerer compte admin
+        Route::post('/enable/disable/boutique/{hashid}', [AuthController::class, 'toogle_active_btq']);
+
         //CRUD CATEGORIE
     Route::prefix('/categorie')->group(function(){
         Route::post('/ajout', [CategorieController::class, 'ajout_categorie']);
@@ -306,7 +311,7 @@ Route::get('/test-mail', function() {
     Route::post('marquer/paye/{hashid}', [CommandeController::class, 'marquerCommePayee']);
 
     
-        Route::post('/update/variation/{hashid}', [VariationController::class, 'update_variation_admin']);
+        Route::post('/update/variation/{hashid}', [VariationController::class, 'update_variation']);
         
 
         Route::get('/pourcentage', [PourcentageController::class, 'afficher_pourcentage']);
@@ -314,7 +319,7 @@ Route::get('/test-mail', function() {
     
      }));
 
-     Route::middleware('auth:admin,boutique')->group(function(){
+     Route::middleware('auth:admin')->group(function(){
         
         Route::post('/variation/{hashid}/delete', [VariationController::class, 'delete_variation']);
      });

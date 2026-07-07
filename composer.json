@@ -6,11 +6,11 @@
     "keywords": ["laravel", "framework"],
     "license": "MIT",
     "require": {
-        "php": "^8.2",
+        "php": "^8.5",
         "doctrine/dbal": "^4.3",
         "google/auth": "^1.49",
         "illuminate/database": "*",
-        "kreait/laravel-firebase": "6.1.0",
+        "kreait/laravel-firebase": "^7.2.1",
         "laravel/framework": "^12.0",
         "laravel/sanctum": "^4.1",
         "laravel/tinker": "^2.10.1",

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace CuyZ\Valinor\Definition\Repository\Reflection\TypeResolver;
 
-use CuyZ\Valinor\Type\ObjectWithGenericType;
 use CuyZ\Valinor\Type\ObjectType;
+use CuyZ\Valinor\Type\ObjectWithGenericType;
 use CuyZ\Valinor\Type\Parser\Factory\TypeParserFactory;
 use CuyZ\Valinor\Type\Parser\VacantTypeAssignerParser;
 use CuyZ\Valinor\Type\Type;
@@ -45,12 +45,12 @@ final class ClassLocalTypeAliasResolver
         }
 
         $typeParser = $this->typeParserFactory->buildAdvancedTypeParserForClass($type->className());
-        $typeParser = new VacantTypeAssignerParser($typeParser, $vacantTypes);
 
         $types = [];
 
         foreach ($localAliases as $name => $raw) {
-            $types[$name] = $typeParser->parse($raw);
+            $parser = new VacantTypeAssignerParser($typeParser, [...$vacantTypes, ...$types]);
+            $types[$name] = $parser->parse($raw);
 
             if ($types[$name] instanceof UnresolvableType) {
                 $types[$name] = $types[$name]->forLocalAlias($raw, $name, $type);

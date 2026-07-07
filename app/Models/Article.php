@@ -22,7 +22,8 @@ class Article extends Model
         'old_price',
         'images',
         'description',
-        'id_btq'
+        'id_btq',
+        'stock'
     ];
 
     

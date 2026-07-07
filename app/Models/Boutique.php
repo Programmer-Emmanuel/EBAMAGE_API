@@ -26,6 +26,7 @@ class Boutique extends Authenticatable
         'tel_btq',
         'image_btq',
         'password_btq',
+        'is_active',
         'solde_tdl',
         'device_token',
     ];

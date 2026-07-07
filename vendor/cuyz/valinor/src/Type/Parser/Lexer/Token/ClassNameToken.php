@@ -24,7 +24,10 @@ use ReflectionClassConstant;
 use function array_map;
 use function array_values;
 use function count;
+use function current;
 use function explode;
+use function preg_match;
+use function reset;
 
 /** @internal */
 final class ClassNameToken implements TraversingToken
@@ -110,7 +113,7 @@ final class ClassNameToken implements TraversingToken
             throw new ClassConstantCaseNotFound($this->reflection->name, $symbol);
         }
 
-        $cases = array_map(static fn ($value) => ValueTypeFactory::from($value), $cases);
+        $cases = array_map(ValueTypeFactory::from(...), $cases);
 
         if (count($cases) > 1) {
             return UnionType::from(...array_values($cases));

@@ -118,23 +118,6 @@ return [
 
             ],
 
-            'dynamic_links' => [
-
-                /*
-                 * Dynamic links can be built with any URL prefix registered on
-                 *
-                 * https://console.firebase.google.com/u/1/project/_/durablelinks/links/
-                 *
-                 * You can define one of those domains as the default for new Dynamic
-                 * Links created within your project.
-                 *
-                 * The value must be a valid domain, for example,
-                 * https://example.page.link
-                 */
-
-                'default_domain' => env('FIREBASE_DYNAMIC_LINKS_DEFAULT_DOMAIN'),
-            ],
-
             /*
              * ------------------------------------------------------------------------
              * Firebase Cloud Storage
@@ -209,7 +192,7 @@ return [
                  * a request is considered timed out
                  *
                  * The default time out can be reviewed at
-                 * https://github.com/kreait/firebase-php/blob/6.x/src/Firebase/Http/HttpClientOptions.php
+                 * https://github.com/beste/firebase-php/blob/6.x/src/Firebase/Http/HttpClientOptions.php
                  */
 
                 'timeout' => env('FIREBASE_HTTP_CLIENT_TIMEOUT'),

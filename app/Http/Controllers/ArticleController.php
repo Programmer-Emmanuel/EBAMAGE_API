@@ -24,10 +24,13 @@ public function ajout_article(Request $request)
         'images' => 'required|array',
         'images.*' => 'image|mimes:jpeg,png,jpg|max:2048',
         'description' => 'required|string|min:10',
+        'stock' => 'required|min:1',
         'id_categories' => 'required|array',
         'id_categories.*' => 'string',
         'id_variations' => 'nullable|array',
-        'id_variations.*' => 'string',
+        'id_variations.*.variation_id' => 'required|string',
+        'id_variations.*.lib_variation' => 'required|array|min:1',
+        'id_variations.*.lib_variation.*' => 'required|string|max:255',
     ]);
 
     if ($request->filled('old_price') && $request->old_price <= $request->prix) {
@@ -57,6 +60,7 @@ public function ajout_article(Request $request)
         $article->old_price = $request->old_price;
         $article->images = json_encode($uploadedImages);
         $article->description = $request->description;
+        $article->stock = $request->stock;
         $article->id_btq = auth('boutique')->id();
         $article->save();
 
@@ -74,38 +78,56 @@ public function ajout_article(Request $request)
         // 🔹 Gestion des variations
         $variationIdsToAttach = [];
 
-        if ($request->filled('id_variations')) {
-            foreach ($request->id_variations as $hashid) {
-                $idVariation = Hashids::decode($hashid)[0] ?? null;
-                if (!$idVariation) {
-                    Log::warning('ID variation invalide', ['input' => $hashid]);
-                    continue;
-                }
+if ($request->filled('id_variations')) {
 
-                $variation = Variation::find($idVariation);
+    foreach ($request->id_variations as $item) {
 
-                if (!$variation) {
-                    Log::warning('Variation introuvable', ['id' => $idVariation]);
-                    continue;
-                }
+        $idVariation = Hashids::decode($item['variation_id'])[0] ?? null;
 
-                // Si c'est une variation globale admin, on la clone pour la boutique
-                if (is_null($variation->id_btq)) {
-                    $newVariation = new Variation();
-                    $newVariation->nom_variation = $variation->nom_variation;
-                    $newVariation->lib_variation = $variation->lib_variation;
-                    $newVariation->id_btq = auth('boutique')->id();
-                    $newVariation->save();
-
-                    $variationIdsToAttach[] = $newVariation->id;
-                } else {
-                    $variationIdsToAttach[] = $variation->id;
-                }
-            }
-
-            // 🔹 Utilisation de la relation Eloquent au lieu de DB::table
-            $article->variations()->sync($variationIdsToAttach);
+        if (!$idVariation) {
+            Log::warning('Variation invalide', $item);
+            continue;
         }
+
+        $variation = Variation::find($idVariation);
+
+        if (!$variation) {
+            Log::warning('Variation introuvable', [
+                'id' => $idVariation
+            ]);
+            continue;
+        }
+
+        // Libellés autorisés
+        $libellesAutorises = is_array($variation->lib_variation)
+            ? $variation->lib_variation
+            : json_decode($variation->lib_variation, true);
+
+        // Libellés choisis par le marchand
+        $libellesChoisis = array_values(
+            array_intersect(
+                $item['lib_variation'],
+                $libellesAutorises
+            )
+        );
+
+        if (empty($libellesChoisis)) {
+            continue;
+        }
+
+        // Création d'une nouvelle variation boutique
+        $newVariation = new Variation();
+        $newVariation->nom_variation = $variation->nom_variation;
+        $newVariation->lib_variation = $libellesChoisis;
+        $newVariation->id_btq = auth('boutique')->id();
+        $newVariation->save();
+
+        $variationIdsToAttach[] = $newVariation->id;
+    }
+
+    $article->variations()->sync($variationIdsToAttach);
+}
+        
 
         DB::commit();
 
@@ -394,13 +416,15 @@ public function update_article(Request $request, $hashid)
         'prix' => 'required|numeric|min:10',
         'old_price' => 'nullable|numeric|min:10',
         'description' => 'required|string|min:10',
+        'stock' => 'required|min:1',
         'images' => 'nullable|array',
         'images.*' => 'image|mimes:jpeg,png,jpg|max:2048',
         'id_categories' => 'nullable|array',
         'id_categories.*' => 'string',
-        'variations' => 'nullable|array',
-        'variations.*.id_variation' => 'required|string',
-        'variations.*.lib_variation' => 'required|array|min:1',
+        'id_variations' => 'nullable|array',
+        'id_variations.*.variation_id' => 'required|string',
+        'id_variations.*.lib_variation' => 'required|array|min:1',
+        'id_variations.*.lib_variation.*' => 'required|string|max:255',
     ]);
 
     if ($request->filled('old_price') && $request->old_price <= $request->prix) {
@@ -411,10 +435,16 @@ public function update_article(Request $request, $hashid)
     }
 
     try {
+
+        DB::beginTransaction();
+
         $id = Hashids::decode($hashid)[0] ?? null;
 
         if (!$id) {
-            return response()->json(['message' => 'ID invalide'], 400);
+            return response()->json([
+                'success' => false,
+                'message' => 'ID invalide'
+            ],400);
         }
 
         $article = Article::find($id);
@@ -426,117 +456,138 @@ public function update_article(Request $request, $hashid)
             ]);
         }
 
-        if ($article->id_btq !== auth('boutique')->id()) {
+        if ($article->id_btq != auth('boutique')->id()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Vous n\'êtes pas autorisé à modifier cet article.'
             ]);
         }
 
-        // Mise à jour des champs simples
+        // -------------------
+        // Mise à jour article
+        // -------------------
+
         $article->nom_article = $request->nom_article;
         $article->prix = $request->prix;
         $article->old_price = $request->old_price;
         $article->description = $request->description;
+        $article->stock = $request->stock;
 
-        // Gestion images
         if ($request->hasFile('images')) {
+
             $uploadedImages = [];
+
             foreach ($request->file('images') as $image) {
                 $uploadedImages[] = $this->uploadImageToHosting($image);
             }
+
             $article->images = json_encode($uploadedImages);
         }
 
         $article->save();
 
-        // Gestion catégories
+        // -------------------
+        // Catégories
+        // -------------------
+
         if ($request->has('id_categories')) {
+
             $id_categories = collect($request->id_categories)
                 ->map(fn($hashid) => Hashids::decode($hashid)[0] ?? null)
                 ->filter()
                 ->values()
                 ->all();
+
             $article->categories()->sync($id_categories);
         }
 
-        // Gestion des variations
+        // -------------------
+        // Variations
+        // -------------------
+
         $variationIdsToAttach = [];
 
-        if ($request->filled('variations')) {
-            foreach ($request->variations as $variationData) {
-                $idVariation = Hashids::decode($variationData['id_variation'])[0] ?? null;
+        if ($request->filled('id_variations')) {
+
+            foreach ($request->id_variations as $item) {
+
+                $idVariation = Hashids::decode($item['variation_id'])[0] ?? null;
+
                 if (!$idVariation) {
-                    Log::warning('ID variation invalide', ['input' => $variationData['id_variation']]);
+                    Log::warning('Variation invalide', $item);
                     continue;
                 }
 
-                // Chercher la variation boutique
-                $variation = Variation::where('id', $idVariation)
-                    ->where('id_btq', auth('boutique')->id())
-                    ->first();
+                $variation = Variation::find($idVariation);
 
                 if (!$variation) {
-                    // Chercher la variation globale admin
-                    $variationAdmin = Variation::where('id', $idVariation)
-                        ->whereNull('id_btq')
-                        ->first();
-
-                    if (!$variationAdmin) {
-                        Log::warning('Variation globale non trouvée', ['id' => $idVariation]);
-                        continue;
-                    }
-
-                    // Cloner la variation globale pour la boutique
-                    $variation = new Variation();
-                    $variation->nom_variation = $variationAdmin->nom_variation;
-                    $variation->lib_variation = $variationData['lib_variation'];
-                    $variation->id_btq = auth('boutique')->id();
-                    $variation->save();
-                } else {
-                    // Fusionner les lib_variation existantes et nouvelles
-                    $existingLibs = is_array($variation->lib_variation)
-                        ? $variation->lib_variation
-                        : (json_decode($variation->lib_variation, true) ?: []);
-
-                    $newLibs = $variationData['lib_variation'];
-                    $mergedLibs = array_values(array_unique(array_merge($existingLibs, $newLibs)));
-
-                    $variation->lib_variation = $mergedLibs;
-                    $variation->save();
+                    Log::warning('Variation introuvable', [
+                        'id' => $idVariation
+                    ]);
+                    continue;
                 }
 
-                $variationIdsToAttach[] = $variation->id;
+                $libellesAutorises = is_array($variation->lib_variation)
+                    ? $variation->lib_variation
+                    : json_decode($variation->lib_variation, true);
+
+                $libellesAutorises = $libellesAutorises ?? [];
+
+                $libellesChoisis = array_values(
+                    array_intersect(
+                        $item['lib_variation'],
+                        $libellesAutorises
+                    )
+                );
+
+                if (empty($libellesChoisis)) {
+                    Log::warning('Aucun libellé valide', [
+                        'choisis' => $item['lib_variation'],
+                        'autorises' => $libellesAutorises
+                    ]);
+                    continue;
+                }
+
+                $newVariation = new Variation();
+                $newVariation->nom_variation = $variation->nom_variation;
+                $newVariation->lib_variation = $libellesChoisis;
+                $newVariation->id_btq = auth('boutique')->id();
+                $newVariation->save();
+
+                $variationIdsToAttach[] = $newVariation->id;
             }
 
-            Log::info('Variations à attacher', ['ids' => $variationIdsToAttach]);
             $article->variations()->sync($variationIdsToAttach);
         }
 
-        // Chargement relations
-        $article->load('categories', 'variations');
+        DB::commit();
 
-        // Gestion des suffixes numériques pour nom_variation en cas de doublons
+        $article->refresh();
+        $article->load(['categories','variations']);
+
         $counts = [];
+
         $variationsFormatted = $article->variations->map(function ($v) use (&$counts) {
-            $libVar = $v->lib_variation;
-            if (is_string($libVar)) {
-                $libVar = json_decode($libVar, true) ?: [];
-            }
+
+            $libVar = is_array($v->lib_variation)
+                ? $v->lib_variation
+                : json_decode($v->lib_variation, true);
 
             $baseName = strtolower($v->nom_variation);
+
             $counts[$baseName] = ($counts[$baseName] ?? 0) + 1;
 
-            $suffix = $counts[$baseName] > 1 ? ' ' . $counts[$baseName] : '';
+            $suffix = $counts[$baseName] > 1
+                ? ' '.$counts[$baseName]
+                : '';
 
             return [
-                'hashid' => $v->hashid ?? null,
-                'nom_variation' => $baseName . $suffix,
+                'hashid' => $v->hashid,
+                'nom_variation' => $baseName.$suffix,
                 'lib_variation' => $libVar,
             ];
         });
 
-        // Préparation de la réponse
         $articleData = $article->toArray();
         $articleData['images'] = json_decode($article->images, true);
         $articleData['variations'] = $variationsFormatted;
@@ -546,13 +597,20 @@ public function update_article(Request $request, $hashid)
             'data' => $articleData,
             'message' => 'Article mis à jour avec succès avec ses variations.'
         ]);
+
     } catch (\Exception $e) {
-        Log::error('Erreur update_article', ['exception' => $e]);
+
+        DB::rollBack();
+
+        Log::error('Erreur update_article', [
+            'exception' => $e
+        ]);
+
         return response()->json([
             'success' => false,
             'message' => 'Erreur lors de la mise à jour de l\'article',
             'erreur' => $e->getMessage()
-        ], 500);
+        ],500);
     }
 }
 

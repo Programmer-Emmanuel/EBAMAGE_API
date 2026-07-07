@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace CuyZ\Valinor\Mapper\Object;
 
 use CuyZ\Valinor\Definition\FunctionObject;
-use CuyZ\Valinor\Definition\ParameterDefinition;
 use CuyZ\Valinor\Mapper\Tree\Message\UserlandError;
 use CuyZ\Valinor\Type\ObjectType;
 use Exception;
 
 use function array_map;
 use function array_shift;
+use function array_values;
 
 /** @internal */
 final class FunctionObjectBuilder implements ObjectBuilder
@@ -29,7 +29,7 @@ final class FunctionObjectBuilder implements ObjectBuilder
         $definition = $function->definition;
 
         $arguments = array_map(
-            fn (ParameterDefinition $parameter) => Argument::fromParameter($parameter),
+            Argument::fromParameter(...),
             array_values([...$definition->parameters])
         );
 

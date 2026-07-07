@@ -12,6 +12,12 @@ use CuyZ\Valinor\Utility\Reflection\Annotations;
 use ReflectionClass;
 use ReflectionFunctionAbstract;
 
+use function array_key_exists;
+use function current;
+use function key;
+use function next;
+use function str_ends_with;
+
 /** @internal */
 final class TemplateResolver
 {
@@ -29,6 +35,8 @@ final class TemplateResolver
             $tokens = $annotation->filtered();
 
             $name = current($tokens);
+
+            $covariant = str_ends_with($annotation->name(), '-covariant');
 
             if (array_key_exists($name, $templates)) {
                 $templateType = UnresolvableType::forDuplicatedTemplateName($signature, $name);
@@ -59,7 +67,7 @@ final class TemplateResolver
                 }
             }
 
-            $templates[$name] = new GenericType($name, $templateType);
+            $templates[$name] = new GenericType($name, $templateType, $covariant);
         }
 
         return $templates;

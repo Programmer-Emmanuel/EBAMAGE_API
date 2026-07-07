@@ -9,6 +9,8 @@ use CuyZ\Valinor\Type\Parser\Lexer\TypeLexer;
 use CuyZ\Valinor\Type\Type;
 use CuyZ\Valinor\Type\Types\UnresolvableType;
 
+use function array_map;
+
 /** @internal */
 class LexingParser implements TypeParser
 {
@@ -18,7 +20,7 @@ class LexingParser implements TypeParser
     {
         try {
             $tokens = array_map(
-                fn (string $symbol) => $this->lexer->tokenize($symbol),
+                $this->lexer->tokenize(...),
                 (new TokensExtractor($raw))->filtered()
             );
 

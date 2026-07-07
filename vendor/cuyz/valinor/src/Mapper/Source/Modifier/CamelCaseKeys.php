@@ -4,13 +4,22 @@ declare(strict_types=1);
 
 namespace CuyZ\Valinor\Mapper\Source\Modifier;
 
+use CuyZ\Valinor\Mapper\Configurator\MapKeysToCamelCase;
 use IteratorAggregate;
 use Traversable;
 
+use function assert;
+use function is_int;
 use function is_iterable;
 use function is_string;
+use function lcfirst;
+use function str_replace;
+use function ucwords;
 
 /**
+ * @deprecated This modifier will be removed in version 3.0.
+ *             Use the configurator {@see MapKeysToCamelCase} instead.
+ *
  * @api
  * @implements IteratorAggregate<mixed>
  */

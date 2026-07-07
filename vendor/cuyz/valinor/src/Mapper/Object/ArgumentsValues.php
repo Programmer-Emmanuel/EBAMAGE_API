@@ -4,19 +4,25 @@ declare(strict_types=1);
 
 namespace CuyZ\Valinor\Mapper\Object;
 
+use CuyZ\Valinor\Mapper\Http\HttpRequest;
 use CuyZ\Valinor\Mapper\Tree\Shell;
 use CuyZ\Valinor\Type\CompositeTraversableType;
-use CuyZ\Valinor\Type\Types\ArrayKeyType;
+use CuyZ\Valinor\Type\ObjectType;
+use CuyZ\Valinor\Type\Type;
+use CuyZ\Valinor\Type\Types\UnionType;
 
+use function array_filter;
 use function array_key_exists;
 use function count;
 use function is_array;
+use function is_iterable;
+use function iterator_to_array;
 
 /** @internal */
-final class ArgumentsValues
+final readonly class ArgumentsValues
 {
     public function __construct(
-        public readonly Shell $shell,
+        public Shell $shell,
         private string|null $singleArgumentName = null,
     ) {}
 
@@ -40,7 +46,7 @@ final class ArgumentsValues
      *
      * Example:
      *
-     * ```php
+     * ```
      * final readonly class User
      * {
      *     public function __construct(
@@ -62,6 +68,10 @@ final class ArgumentsValues
             $shell = $shell->withValue(iterator_to_array($shell->value()));
         }
 
+        if ($shell->value() instanceof HttpRequest) {
+            return new self($shell->withType($arguments->toShapedArray()));
+        }
+
         if (count($arguments) !== 1) {
             return new self($shell->withType($arguments->toShapedArray()));
         }
@@ -71,16 +81,13 @@ final class ArgumentsValues
         $type = $argument->type();
         $attributes = $argument->attributes();
 
-        $isTraversableAndAllowsStringKeys = $type instanceof CompositeTraversableType
-            && $type->keyType() !== ArrayKeyType::integer();
-
         if (is_array($shell->value()) && array_key_exists($name, $shell->value())) {
-            if (! $isTraversableAndAllowsStringKeys || $shell->allowSuperfluousKeys || count($shell->value()) === 1) {
+            if (! $type instanceof CompositeTraversableType || $shell->allowSuperfluousKeys || count($shell->value()) === 1) {
                 return new self($shell->withType($arguments->toShapedArray()));
             }
         }
 
-        if ($shell->value() === [] && ! $isTraversableAndAllowsStringKeys) {
+        if ($shell->value() === [] && ! $type instanceof CompositeTraversableType) {
             return new self($shell->withType($arguments->toShapedArray()));
         }
 
@@ -89,6 +96,21 @@ final class ArgumentsValues
         // structure to allow the mapper to do its job. Note that the method
         // `transform()` below allows to get back the desired structure, with
         // the mapped value.
+        // If the target type is a union type, we purposely remove any subtype
+        // that references the class to prevent an infinite loop due to circular
+        // dependency.
+        if ($type instanceof UnionType) {
+            $subTypes = $type->types();
+            $filtered = array_filter(
+                $subTypes,
+                static fn (Type $subType) => ! $subType instanceof ObjectType || $subType->className() !== $shell->type->className() // @phpstan-ignore method.notFound (We know $shell->type is an ObjectType)
+            );
+
+            if ($filtered !== $subTypes) {
+                $type = UnionType::from(...$filtered);
+            }
+        }
+
         return new self(
             shell: $shell->withType($type)->withAttributes($attributes),
             singleArgumentName: $argument->name(),

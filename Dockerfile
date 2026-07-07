@@ -1,5 +1,5 @@
 # Étape 1 : Construire l'application
-FROM php:8.3-fpm AS builder
+FROM php:8.5-fpm AS builder
 
 # Installer dépendances système et extensions PHP nécessaires à Laravel
 RUN apt-get update && apt-get install -y \

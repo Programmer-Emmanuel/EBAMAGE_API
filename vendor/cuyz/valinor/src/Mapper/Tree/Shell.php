@@ -7,17 +7,18 @@ namespace CuyZ\Valinor\Mapper\Tree;
 use CuyZ\Valinor\Definition\Attributes;
 use CuyZ\Valinor\Mapper\Tree\Builder\Node;
 use CuyZ\Valinor\Mapper\Tree\Builder\NodeBuilder;
-use CuyZ\Valinor\Mapper\Tree\Exception\InvalidNodeValue;
 use CuyZ\Valinor\Mapper\Tree\Exception\MissingNodeValue;
 use CuyZ\Valinor\Mapper\Tree\Exception\UnresolvableShellType;
 use CuyZ\Valinor\Mapper\Tree\Message\Message;
 use CuyZ\Valinor\Type\Dumper\TypeDumper;
-use CuyZ\Valinor\Type\FloatType;
 use CuyZ\Valinor\Type\Type;
 use CuyZ\Valinor\Type\Types\UnionType;
 use CuyZ\Valinor\Type\Types\UnresolvableType;
 use CuyZ\Valinor\Utility\ValueDumper;
 
+use function array_fill_keys;
+use function array_key_exists;
+use function array_map;
 use function assert;
 use function implode;
 
@@ -40,26 +41,23 @@ final class Shell
         public bool $allowUndefinedValues,
         public bool $allowSuperfluousKeys,
         public bool $allowPermissiveTypes,
-        /** @var list<string> */
+        /** @var array<string, null> */
         public array $allowedSuperfluousKeys,
         public bool $shouldApplyConverters,
         private NodeBuilder $nodeBuilder,
         private TypeDumper $typeDumper,
-        private ObjectTrace $objectTrace, // Helps detecting circular dependencies
         /** @var non-negative-int */
         private int $childrenCount,
-    ) {
-        $this->castFloatValue();
-    }
+        /** @var array<array-key, array-key> */
+        private array $nameMap = [],
+        /** @var array<string, null> */
+        private array $childrenWithScalarValueCasting = [],
+    ) {}
 
     public function build(): Node
     {
         if ($this->type instanceof UnresolvableType) {
             throw new UnresolvableShellType($this->type);
-        }
-
-        if ($this->objectTrace->hasDetectedCircularDependency($this->type)) {
-            return $this->error(new InvalidNodeValue());
         }
 
         if (! $this->hasValue) {
@@ -78,14 +76,18 @@ final class Shell
         $this->childrenCount++;
 
         $self = clone $this;
-        $self->name = $name;
+        $self->name = $this->nameMap[$name] ?? $name;
         $self->type = $type;
-        $self->path = $this->name === '' ? $name : "$this->path.$name";
+        $self->path = $this->path === '*root*' ? $self->name : "$this->path.$self->name";
         $self->hasValue = false;
         $self->value = null;
         $self->attributes = Attributes::empty();
-        $self->objectTrace = $this->objectTrace->markAsVisited($type);
         $self->childrenCount = 0;
+        $self->nameMap = [];
+
+        if (array_key_exists($name, $this->childrenWithScalarValueCasting)) {
+            $self->allowScalarValueCasting = true;
+        }
 
         return $self;
     }
@@ -112,9 +114,6 @@ final class Shell
     {
         $self = clone $this;
         $self->type = $newType;
-        $self->objectTrace = $this->objectTrace->markAsVisited($newType);
-
-        $self->castFloatValue();
 
         return $self;
     }
@@ -125,8 +124,6 @@ final class Shell
         $self = clone $this;
         $self->value = $newValue;
         $self->hasValue = true;
-
-        $self->castFloatValue();
 
         return $self;
     }
@@ -148,6 +145,23 @@ final class Shell
         return $self;
     }
 
+    public function hasNameMap(): bool
+    {
+        return $this->nameMap !== [];
+    }
+
+    /**
+     * @param array<array-key, array-key> $nameMap
+     */
+    public function withNameMap(array $nameMap): self
+    {
+        // @infection-ignore-all / We don't want to test the clone behavior
+        $self = clone $this;
+        $self->nameMap = $nameMap;
+
+        return $self;
+    }
+
     /**
      * @param list<string> $allowedSuperfluousKeys
      */
@@ -155,7 +169,7 @@ final class Shell
     {
         // @infection-ignore-all / We don't want to test the clone behavior
         $self = clone $this;
-        $self->allowedSuperfluousKeys = $allowedSuperfluousKeys;
+        $self->allowedSuperfluousKeys = array_fill_keys($allowedSuperfluousKeys, null);
 
         return $self;
     }
@@ -164,6 +178,18 @@ final class Shell
     {
         $self = clone $this;
         $self->allowSuperfluousKeys = true;
+
+        return $self;
+    }
+
+    /**
+     * @param list<string> $childrenWithScalarValueCasting
+     */
+    public function allowScalarValueCastingForChildren(array $childrenWithScalarValueCasting): self
+    {
+        // @infection-ignore-all / We don't want to test the clone behavior
+        $self = clone $this;
+        $self->childrenWithScalarValueCasting = array_fill_keys($childrenWithScalarValueCasting, null);
 
         return $self;
     }
@@ -190,7 +216,7 @@ final class Shell
     {
         if ($this->type instanceof UnionType) {
             return implode(', ', array_map(
-                fn (Type $type) => $this->typeDumper->dump($type),
+                $this->typeDumper->dump(...),
                 $this->type->types(),
             ));
         }
@@ -201,16 +227,5 @@ final class Shell
     public function dumpValue(): string
     {
         return $this->hasValue ? ValueDumper::dump($this->value) : '*missing*';
-    }
-
-    private function castFloatValue(): void
-    {
-        // When the value is an integer and the type is a float, the value is
-        // cast to float, to follow the rule of PHP regarding acceptance of an
-        // integer value in a float type. Note that PHPStan/Psalm analysis
-        // applies the same rule.
-        if ($this->type instanceof FloatType && is_int($this->value)) {
-            $this->value = (float)$this->value;
-        }
     }
 }
