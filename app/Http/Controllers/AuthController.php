@@ -80,17 +80,17 @@ class AuthController extends Controller
         $client->save();
 
         // 5. Envoi de l'email
-        try {
-            Mail::to($client->email_clt)->send(new OtpMail($code_otp));
-        } catch (\Exception $e) {
-            // Si l'email échoue, supprimer le compte et retourner une erreur
-            $client->delete();
+        // try {
+        //     Mail::to($client->email_clt)->send(new OtpMail($code_otp));
+        // } catch (\Exception $e) {
+        //     // Si l'email échoue, supprimer le compte et retourner une erreur
+        //     $client->delete();
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Erreur lors de l’envoi de l’email de confirmation. Veuillez réessayer.',
-            ], 500);
-        }
+        //     return response()->json([
+        //         'success' => false,
+        //         'message' => 'Erreur lors de l’envoi de l’email de confirmation. Veuillez réessayer.',
+        //     ], 500);
+        // }
 
         // 6. Réponse finale
         return response()->json([
@@ -271,75 +271,63 @@ class AuthController extends Controller
 
 
     //CONNEXION CLIENT
-    public function login_clt(Request $request)
+public function login_clt(Request $request)
 {
     try {
-        // 1. Validation des données
+        // 1. Validation
         $validated = $request->validate([
-            'email_clt' => 'required|email',
-            'password_clt' => 'required|min:6'
+            'login' => 'required', // email OU téléphone
+            'password_clt' => 'required',
         ], [
-            'email_clt.required' => 'L’email du client est obligatoire.',
-            'email_clt.email' => 'L’adresse email est invalide.',
+            'login.required' => 'Email ou numéro de téléphone requis.',
             'password_clt.required' => 'Le mot de passe est obligatoire.',
-            'password_clt.min' => 'Le mot de passe doit contenir au moins 6 caractères.',
         ]);
 
-        // 2. Recherche de l’utilisateur
-        $client = User::where('email_clt', $validated['email_clt'])->first();
+        // 2. Trouver le client (email OU téléphone)
+        $client = User::where('email_clt', $validated['login'])
+            ->orWhere('tel_clt', $validated['login'])
+            ->first();
 
+        // 3. Vérifier existence
         if (!$client) {
             return response()->json([
                 'success' => false,
-                'message' => 'Aucun client trouvé avec cet email.',
-            ], 404);
-        }
-
-        // 3. Vérification du mot de passe
-        if (!Hash::check($validated['password_clt'], $client->password_clt)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Identifiants incorrect.',
+                'message' => 'Identifiants invalides.',
             ], 401);
         }
 
-        // 4. Vérification de la validation du compte (OTP)
-        if (!$client->is_verify) {
+        // 4. Vérifier mot de passe
+        if (!Hash::check($validated['password_clt'], $client->password_clt)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Votre compte n’a pas encore été vérifié. Veuillez saisir le code OTP envoyé par mail.',
-            ], 403);
+                'message' => 'Identifiants invalides.',
+            ], 401);
         }
 
-        // 5. Génération du token
+        // 5. Token
         $token = $client->createToken('client-token')->plainTextToken;
+
+        // 6. Masquer le mot de passe
+        $client->makeHidden(['password_clt']);
 
         return response()->json([
             'success' => true,
             'message' => 'Connexion réussie.',
-            'data' => [
-                'nom_clt' => $client->nom_clt,
-                'email_clt' => $client->email_clt,
-                'tel_clt' => $client->tel_clt,
-                'solde_tdl' => $client->solde_tdl,
-                'device_token' => $client->device_token,
-                'hashid' => Hashids::encode($client->id)
-            ],
-            'token' => $token
+            'data' => $client,
+            'token' => $token,
         ]);
 
-    } catch (QueryException $e) {
+    } catch (\Illuminate\Validation\ValidationException $e) {
         return response()->json([
             'success' => false,
             'message' => 'Erreur de validation.',
-            'errors' => $e->getMessage()
+            'errors' => $e->errors(),
         ], 422);
 
-    } catch (QueryException $e) {
+    } catch (\Throwable $e) {
         return response()->json([
             'success' => false,
-            'message' => 'Une erreur est survenue lors de la tentative de connexion.',
-            // 'erreur' => $e->getMessage() // À activer uniquement en debug
+            'message' => 'Une erreur est survenue lors de la connexion.',
         ], 500);
     }
 }
