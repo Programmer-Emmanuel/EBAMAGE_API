@@ -64,9 +64,9 @@ class AuthController extends Controller
         }
 
         // 3. Génération du code OTP
-        $code_otp = rand(1000, 9999);
+        // $code_otp = rand(1000, 9999);
 
-        // $code_otp = substr($validatedData['tel_clt'], -4);
+        $code_otp = substr($validatedData['tel_clt'], -4);
 
         // 4. Création du compte client
         $client = new User();
