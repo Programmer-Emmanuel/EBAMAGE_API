@@ -293,6 +293,7 @@ if ($request->filled('id_variations')) {
                 'old_price' => $art->old_price,
                 'image' => collect(json_decode($art->images, true))->first(), // ✅ une seule image
                 'description' => $art->description,
+                'stock' => $art->stock,
                 'created_at' => $art->created_at,
                 'updated_at' => $art->updated_at,
                 'hashid' => $art->hashid,
@@ -344,6 +345,7 @@ if ($request->filled('id_variations')) {
                 'old_price' => $article->old_price,
                 'images' => json_decode($article->images, true),
                 'description' => $article->description,
+                'stock' => $article->stock,
                 'created_at' => $article->created_at,
                 'updated_at' => $article->updated_at,
                 'hashid' => $article->hashid,
