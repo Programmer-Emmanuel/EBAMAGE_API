@@ -76,21 +76,20 @@ class AuthController extends Controller
         $client->password_clt = Hash::make($validatedData['password_clt']);
         $client->code_otp = $code_otp;
         $client->otp_expires_at = now()->addMinutes(60);
-        $client->is_verify = false;
         $client->save();
 
         // 5. Envoi de l'email
-        try {
-            Mail::to($client->email_clt)->send(new OtpMail($code_otp));
-        } catch (\Exception $e) {
-            // Si l'email échoue, supprimer le compte et retourner une erreur
-            $client->delete();
+        // try {
+        //     Mail::to($client->email_clt)->send(new OtpMail($code_otp));
+        // } catch (\Exception $e) {
+        //     // Si l'email échoue, supprimer le compte et retourner une erreur
+        //     $client->delete();
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Erreur lors de l’envoi de l’email de confirmation. Veuillez réessayer.',
-            ], 500);
-        }
+        //     return response()->json([
+        //         'success' => false,
+        //         'message' => 'Erreur lors de l’envoi de l’email de confirmation. Veuillez réessayer.',
+        //     ], 500);
+        // }
 
         // 6. Réponse finale
         return response()->json([

@@ -12,6 +12,7 @@ use App\Http\Controllers\PourcentageController;
 use App\Http\Controllers\PrixController;
 use App\Http\Controllers\PubliciteController;
 use App\Http\Controllers\RechercheController;
+use App\Http\Controllers\ShareLinkController;
 use App\Http\Controllers\VariationController;
 use App\Http\Controllers\VilleCommuneController;
 use Illuminate\Support\Facades\Mail;
@@ -327,4 +328,10 @@ Route::get('/test-mail', function() {
      Route::get('/test-fcm', [NotificationController::class, 'send']);
          Route::get('afficher/prix', [PrixController::class, 'afficher_prix']);
 
+
+    Route::post('/create/link/shop', [ShareLinkController::class, 'create_link_shop'])->middleware('auth:admin');
+    Route::post('/create/link/article', [ShareLinkController::class, 'create_link_article'])->middleware('auth:admin');
+    Route::get('get/sharelinks', [ShareLinkController::class, 'get_links'])->middleware('auth:admin');
+    Route::post('/update/link/shop', [ShareLinkController::class, 'update_link_shop'])->middleware('auth:admin');
+    Route::post('/update/link/article', [ShareLinkController::class, 'update_link_article'])->middleware('auth:admin');
 });

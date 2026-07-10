@@ -357,9 +357,18 @@ public function augmenterQuantite(Request $request){
             return response()->json(['success' => false, 'message' => 'Article panier non trouvé.'], 404);
         }
 
-        if ($panier->quantite >= 10) {
-            return response()->json(['success' => false, 'message' => 'Quantité maximale atteinte.'], 400);
+        // Vérification du stock
+        if ($panier->quantite >= $panier->article->stock) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Stock insuffisant.'
+            ], 400);
         }
+        
+        //Limiter l’augmentation à 10  
+        // if ($panier->quantite >= 10) {
+        //     return response()->json(['success' => false, 'message' => 'Quantité maximale atteinte.'], 400);
+        // }
 
         $prixUnitaire = $panier->article->prix ?? 0;
         $panier->quantite += 1;

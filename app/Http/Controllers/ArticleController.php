@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Article;
 use App\Models\Categorie;
+use App\Models\ShareLink;
 use App\Models\Variation;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -182,7 +183,7 @@ if ($request->filled('id_variations')) {
 
     private function uploadImageToHosting($image)
     {
-        $apiKey = '9b1ab6564d99aab6418ad53d3451850b';
+        $apiKey = env('API_KEY_IMGBB');
 
         if (!$image->isValid()) {
             throw new \Exception("Fichier image non valide.");
@@ -205,7 +206,9 @@ if ($request->filled('id_variations')) {
     public function liste_article()
 {
     try {
-        $articles = Article::with('boutique', 'categories', 'variations')->get();
+        $articles = Article::with('boutique', 'categories', 'variations')
+            ->where('stock', '!=', 0)
+            ->get();
 
         if ($articles->isEmpty()) {
             return response()->json([
@@ -270,7 +273,13 @@ if ($request->filled('id_variations')) {
     public function article($hashid)
 {
     try {
+        
         $id = Hashids::decode($hashid)[0] ?? null;
+
+        $share_link_article = ShareLink::whereNull('link_shop')->first();
+        $link_article = $share_link_article->link_article;
+
+        $share_link = $link_article . '/';
 
         if (!$id) {
             return response()->json(['message' => 'ID invalide'], 400);
@@ -286,7 +295,7 @@ if ($request->filled('id_variations')) {
         }
 
         // Formatage des articles similaires
-        $formatArticle = function ($art) {
+        $formatArticle = function ($art) use ($share_link) {
             return [
                 'nom_article' => $art->nom_article,
                 'prix' => $art->prix,
@@ -297,6 +306,7 @@ if ($request->filled('id_variations')) {
                 'created_at' => $art->created_at,
                 'updated_at' => $art->updated_at,
                 'hashid' => $art->hashid,
+                'share_link' => $share_link . '' .$art->hashid
             ];
         };
 
@@ -352,6 +362,8 @@ if ($request->filled('id_variations')) {
                 'nom_btq' => $article->boutique->nom_btq ?? null,
                 'categories' => $article->categories,
                 'variations' => $variationsFormatted,
+                'share_link' => $share_link . $article->hashid
+
             ],
             'communs' => $autre_articles,
             'similaires' => $articles_meme_categorie,
@@ -670,6 +682,7 @@ public function update_article(Request $request, $hashid)
 
         $articles = Article::where('id_btq', $id)
             ->with(['categories', 'variations'])
+            ->where('stock', '!=', 0)
             ->get();
 
         if ($articles->isEmpty()) {
@@ -774,6 +787,11 @@ public function update_article(Request $request, $hashid)
     try {
         $id_btq = Hashids::decode($hashid)[0] ?? null;
 
+        $share_link_shop = ShareLink::whereNull('link_article')->first();
+        $link_shop = $share_link_shop->link_shop;
+
+        $share_link = $link_shop . '/';
+
         if (!$id_btq) {
             return response()->json([
                 'success' => false,
@@ -784,6 +802,7 @@ public function update_article(Request $request, $hashid)
         $articles = Article::where('id_btq', $id_btq)
             ->with(['categories', 'variations'])
             ->orderBy('created_at', 'desc')
+            ->where('stock', '!=', 0)
             ->get();
 
         if ($articles->isEmpty()) {
@@ -794,7 +813,7 @@ public function update_article(Request $request, $hashid)
             ]);
         }
 
-        $articles = $articles->map(function ($article) {
+        $articles = $articles->map(function ($article) use ($share_link){
             // Décoder les images
             $images = json_decode($article->images, true) ?? [];
 
@@ -821,6 +840,7 @@ public function update_article(Request $request, $hashid)
 
             return [
                 'hashid' => $article->hashid,
+                'share_link' => $share_link . $article->hashid,                
                 'nom_article' => $article->nom_article,
                 'prix' => $article->prix,
                 'old_price' => $article->old_price,
