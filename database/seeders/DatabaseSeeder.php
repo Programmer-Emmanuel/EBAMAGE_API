@@ -6,6 +6,7 @@ use App\Models\Admin;
 use App\Models\Pourcentage;
 use App\Models\Prix;
 use App\Models\Seuil;
+use App\Models\ShareLink;
 use App\Models\Variation;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -180,6 +181,19 @@ class DatabaseSeeder extends Seeder
         $variation->lib_variation = []; // vide au départ
         $variation->id_btq = null;
         $variation->save();
+
+        //Ajouter share link boutique
+
+        $share_link_shop = new ShareLink();
+        $share_link_shop->link_shop = 'https://link/boutique';
+        $share_link_shop->save();
+        $this->command->info("   - Share Link boutique créée!");
+        
+        $share_link_boutique = new ShareLink();
+        $share_link_boutique->link_article = 'https://link/article';
+        $share_link_boutique->save();
+        $this->command->info("   - Share Link article créée!");
+
 
         // -------------------------
         // 9. Affichage console

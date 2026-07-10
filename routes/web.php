@@ -230,8 +230,6 @@ Route::get('/test-mail', function() {
     
     Route::get('/commandes', [CommandeController::class, 'liste_commande']);
     //Changer le statut des commandes
-    Route::post('/commande/{hashid}/confirme', [CommandeController::class, 'edit_statut_confirme']);
-    Route::post('/commande/{hashid}/annule', [CommandeController::class, 'edit_statut_annule']);
     Route::post('/commande/{hashid}/livree', [CommandeController::class, 'edit_statut_livree']);
     Route::post('/commande/{hashid_commande}/sous_commande/{hashid_article}', [CommandeController::class, 'edit_statut_sous_commande']);
     Route::get('/commande/rechercher/{code}', [CommandeController::class, 'rechercherCommande']);
@@ -334,4 +332,7 @@ Route::get('/test-mail', function() {
     Route::get('get/sharelinks', [ShareLinkController::class, 'get_links'])->middleware('auth:admin');
     Route::post('/update/link/shop', [ShareLinkController::class, 'update_link_shop'])->middleware('auth:admin');
     Route::post('/update/link/article', [ShareLinkController::class, 'update_link_article'])->middleware('auth:admin');
+
+        Route::post('/commande/{hashid}/confirme', [CommandeController::class, 'edit_statut_confirme']);
+    Route::post('/commande/{hashid}/annule', [CommandeController::class, 'edit_statut_annule']);
 });

@@ -454,6 +454,15 @@ public function rechercherCommande(Request $request)
 
    public function edit_statut_confirme($hashid)
 {
+
+    $admin = auth('admin')->user();
+    $boutique = auth('boutique')->user();
+
+    if (!$admin && !$boutique) {
+        return response()->json([
+            'message' => 'Non authentifié'
+        ], 401);
+    }
     $response = $this->updateStatutCommande($hashid, 'Confirmée');
 
     // Si la commande existe et le statut a bien été mis à jour :
@@ -546,6 +555,15 @@ public function edit_statut_livree($hashid)
 
 public function edit_statut_annule($hashid)
 {
+
+    $admin = auth('admin')->user();
+    $boutique = auth('boutique')->user();
+
+    if (!$admin && !$boutique) {
+        return response()->json([
+            'message' => 'Non authentifié'
+        ], 401);
+    }
     $response = $this->updateStatutCommande($hashid, 'Annulée');
 
     if ($response->getData()->success ?? false) {
