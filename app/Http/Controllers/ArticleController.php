@@ -840,7 +840,6 @@ public function update_article(Request $request, $hashid)
 
             return [
                 'hashid' => $article->hashid,
-                'share_link' => $share_link . $article->hashid,                
                 'nom_article' => $article->nom_article,
                 'prix' => $article->prix,
                 'old_price' => $article->old_price,
@@ -855,6 +854,7 @@ public function update_article(Request $request, $hashid)
         return response()->json([
             'success' => true,
             'data' => $articles,
+            'share_link' => $share_link . $hashid,                
             'message' => 'Articles de la boutique récupérés avec succès.'
         ]);
     } catch (\Exception $e) {
