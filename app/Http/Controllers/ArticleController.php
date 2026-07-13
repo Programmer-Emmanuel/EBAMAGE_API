@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Article;
+use App\Models\Boutique;
 use App\Models\Categorie;
 use App\Models\ShareLink;
 use App\Models\Variation;
@@ -360,6 +361,7 @@ if ($request->filled('id_variations')) {
                 'updated_at' => $article->updated_at,
                 'hashid' => $article->hashid,
                 'nom_btq' => $article->boutique->nom_btq ?? null,
+                'image_btq' => $article->boutique->image_btq ?? null,
                 'categories' => $article->categories,
                 'variations' => $variationsFormatted,
                 'share_link' => $share_link . $article->hashid
@@ -797,11 +799,20 @@ public function update_article(Request $request, $hashid)
 
         $share_link = $link_shop . '/';
 
+        $boutique = Boutique::find($id_btq);
+
         if (!$id_btq) {
             return response()->json([
                 'success' => false,
                 'message' => 'Identifiant de boutique invalide.'
             ], 400);
+        }
+
+        if(!$boutique){
+            return response()->json([
+                'success' => false,
+                'message' => 'Boutique introuvable'
+            ], 404);
         }
 
         $articles = Article::where('id_btq', $id_btq)
@@ -856,10 +867,16 @@ public function update_article(Request $request, $hashid)
             ];
         });
 
+        $boutique = Boutique::find($id_btq);
+
         return response()->json([
             'success' => true,
             'data' => $articles,
-            'share_link' => $share_link . $hashid,                
+            'share_link' => $share_link . $hashid,   
+            'boutique' => [
+                'nom_btq' => $boutique->nom_btq,
+                'image_btq' => $boutique->image_btq
+            ],             
             'message' => 'Articles de la boutique récupérés avec succès.'
         ]);
     } catch (\Exception $e) {
