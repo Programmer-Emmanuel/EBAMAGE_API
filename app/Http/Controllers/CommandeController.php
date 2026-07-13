@@ -745,7 +745,7 @@ public function edit_statut_sous_commande(Request $request, $hashid_commande, $h
                 $id_article = Hashids::decode($item['hashid'])[0] ?? null;
                 if (!$id_article) return null;
 
-                $article = \App\Models\Article::find($id_article);
+                 $article = \App\Models\Article::where('stock', '!=', 0)->find($id_article);
                 if (!$article) return null;
 
                 $images = json_decode($article->images, true);
@@ -848,6 +848,7 @@ public function edit_statut_sous_commande(Request $request, $hashid_commande, $h
         $perPage = $request->query('per_page', 10);
 
         $articles = Article::inRandomOrder()
+            ->where('stock', '!=', 0)
             ->paginate($perPage, ['id', 'nom_article', 'prix', 'old_price', 'description', 'images']);
 
         if ($articles->isEmpty()) {

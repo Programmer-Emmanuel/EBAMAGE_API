@@ -388,7 +388,12 @@ if ($request->filled('id_variations')) {
                 return response()->json(['message' => 'ID invalide'], 400);
             }
 
-            $categorie = Categorie::with('articles.categories')->find($id);
+            $categorie = Categorie::with([
+                'articles' => function ($query) {
+                    $query->where('stock', '!=', 0);
+                },
+                'articles.categories'
+            ])->find($id);
 
             if (!$categorie) {
                 return response()->json([
@@ -720,7 +725,7 @@ public function update_article(Request $request, $hashid)
     public function trier_par_prix_moinsCher_cher()
     {
         try {
-            $articles = Article::orderBy('prix', 'asc')->get();
+            $articles = Article::orderBy('prix', 'asc')->where('stock', '!=', 0)->get();
 
             if ($articles->isEmpty()) {
                 return response()->json([
@@ -752,7 +757,7 @@ public function update_article(Request $request, $hashid)
     public function trier_par_prix_cher_moinsCher()
     {
         try {
-            $articles = Article::orderBy('prix', 'desc')->get();
+            $articles = Article::orderBy('prix', 'desc')->where('stock', '!=', 0)->get();
 
             if ($articles->isEmpty()) {
                 return response()->json([
