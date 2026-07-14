@@ -123,6 +123,13 @@ class CommandeController extends Controller
             $article->update([
                 'stock' => $article->stock - $quantite
             ]);
+
+            $article->refresh();
+
+            if ($article->stock <= 0) {
+                $article->delete();
+            }
+
             $prix_article = $article->prix ?? 0;
             $prix_total_articles += ($prix_article * $quantite);
 

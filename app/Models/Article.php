@@ -26,6 +26,14 @@ class Article extends Model
         'stock'
     ];
 
+    protected static function booted(){
+        static::updated(function ($article) {
+            if ($article->wasChanged('stock') && $article->stock <= 0) {
+                $article->delete();
+            }
+        });
+    }
+
     
 
     public function boutique(){
